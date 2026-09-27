@@ -15,11 +15,27 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * fixtures/status_sample.json은 공식 명세 5개 항목으로 만든 최소 fixture다.
- * TODO(확인 필요): 실제 응답을 받으면 그 응답으로 교체한다.
+ * fixtures/status_real_20260927.json은 2026-09-27 실제 getChargerStatus 응답(numOfRows=10)이다.
  */
 class EvChargerResponseParserTest {
 
     EvChargerResponseParser parser = new EvChargerResponseParser(new ObjectMapper());
+
+    @Test
+    void 실제_상태_응답을_파싱한다() throws IOException {
+        String body = new ClassPathResource("fixtures/status_real_20260927.json").getContentAsString(StandardCharsets.UTF_8);
+
+        EvChargerPage<StatusItem> page = parser.parse(body, StatusItem.class);
+
+        assertThat(page.totalCount()).isEqualTo(16616);
+        assertThat(page.items()).hasSize(10);
+        assertThat(page.items()).allSatisfy(item -> {
+            assertThat(item.statId()).hasSize(8);
+            assertThat(item.chgerId()).hasSize(2);
+            assertThat(item.stat()).hasSize(1);
+            assertThat(item.statUpdDt()).hasSize(14);
+        });
+    }
 
     @Test
     void 평면_구조_응답을_파싱한다() throws IOException {

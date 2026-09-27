@@ -21,9 +21,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  *   <li>item이 1건이면 배열이 아니라 객체로 올 수 있다</li>
  * </ul>
  *
- * TODO(확인 필요): 응답 봉투 구조를 실제 응답으로 확정한다.
- * 평면 구조({resultCode, totalCount, items.item})와 공공데이터포털 표준 구조
- * ({response.header, response.body})를 모두 해석하도록 둔다.
+ * 응답 봉투: 2026-09-27 실제 호출로 평면 구조({resultCode, totalCount, items.item})임을 확인했다.
+ * 공공데이터포털 표준 구조({response.header, response.body})도 방어적으로 해석한다.
  */
 @Component
 public class EvChargerResponseParser {

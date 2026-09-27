@@ -22,8 +22,8 @@ spring:
 
 evision:
   evcharger:
-    base-url: http://apis.data.go.kr/B552584/EvCharger
-    service-key: ${DATA_GO_KR_SERVICE_KEY:}
+    base-url: https://apis.data.go.kr/B552584/EvCharger   # 공식 페이지 기준 https (명세 초안은 http)
+    service-key: ${DATA_GO_KR_SERVICE_KEY:}                # Decoding 키. Encoding 키(% 포함)를 넣으면 이중 인코딩으로 403
     page-size: 9999
     status-period-minutes: 10
     connect-timeout: 5s
