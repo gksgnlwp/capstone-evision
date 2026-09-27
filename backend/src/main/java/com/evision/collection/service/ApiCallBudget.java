@@ -27,8 +27,14 @@ public class ApiCallBudget {
     }
 
     public int remainingToday() {
-        LocalDateTime startOfToday = LocalDate.now(clock).atStartOfDay();
-        long used = runRepository.sumApiCallCountSince(startOfToday);
-        return (int) Math.max(0, properties.dailyCallLimit() - used);
+        return (int) Math.max(0, properties.dailyCallLimit() - usedToday());
+    }
+
+    public long usedToday() {
+        return runRepository.sumApiCallCountSince(LocalDate.now(clock).atStartOfDay());
+    }
+
+    public int dailyLimit() {
+        return properties.dailyCallLimit();
     }
 }

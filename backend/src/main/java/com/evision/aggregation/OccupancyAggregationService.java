@@ -29,9 +29,9 @@ public class OccupancyAggregationService {
 
     private static final Logger log = LoggerFactory.getLogger(OccupancyAggregationService.class);
 
-    static final Duration VALIDITY_LOOKBACK = Duration.ofMinutes(10);
-    static final Duration VALIDITY_TOLERANCE = Duration.ofMinutes(1);
-    static final int WINDOW_MINUTES = 30;
+    public static final Duration VALIDITY_LOOKBACK = Duration.ofMinutes(10);
+    public static final Duration VALIDITY_TOLERANCE = Duration.ofMinutes(1);
+    public static final int WINDOW_MINUTES = 30;
 
     private final SingleRunGuard guard = new SingleRunGuard();
 
@@ -107,13 +107,14 @@ public class OccupancyAggregationService {
         return rows.size();
     }
 
-    static boolean isValid(LocalDateTime t, List<LocalDateTime> successfulRuns) {
+    /** 관측 시점 t의 유효성. 수집 현황 모니터링(30분 구간 가용률)도 같은 규칙을 쓴다. */
+    public static boolean isValid(LocalDateTime t, List<LocalDateTime> successfulRuns) {
         LocalDateTime from = t.minus(VALIDITY_LOOKBACK);
         LocalDateTime to = t.plus(VALIDITY_TOLERANCE);
         return successfulRuns.stream().anyMatch(r -> r.isAfter(from) && !r.isAfter(to));
     }
 
-    static List<LocalDateTime> pointsOf(LocalDateTime windowStart) {
+    public static List<LocalDateTime> pointsOf(LocalDateTime windowStart) {
         List<LocalDateTime> points = new ArrayList<>(OccupancyWindowCalculator.POINTS_PER_WINDOW);
         for (int i = 0; i < OccupancyWindowCalculator.POINTS_PER_WINDOW; i++) {
             points.add(windowStart.plusMinutes((long) i * OccupancyWindowCalculator.POINT_INTERVAL_MINUTES));
@@ -121,7 +122,7 @@ public class OccupancyAggregationService {
         return points;
     }
 
-    static LocalDateTime floorToWindow(LocalDateTime time) {
+    public static LocalDateTime floorToWindow(LocalDateTime time) {
         LocalDateTime hour = time.truncatedTo(ChronoUnit.HOURS);
         return time.getMinute() < WINDOW_MINUTES ? hour : hour.plusMinutes(WINDOW_MINUTES);
     }
