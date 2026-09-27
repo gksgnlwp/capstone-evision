@@ -28,7 +28,7 @@ replay_pid*
 build/
 target/
 out/
-!gradle/wrapper/gradle-wrapper.jar
+!**/gradle/wrapper/gradle-wrapper.jar
 
 # IDE
 .idea/
@@ -42,6 +42,7 @@ Thumbs.db
 # Environment / secrets
 .env
 .env.*
+!.env.example
 application-secret.yml
 application-local.yml
 

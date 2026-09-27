@@ -1,0 +1,44 @@
+spring:
+  application:
+    name: evision-backend
+  datasource:
+    # 로컬 bootRun: compose.yaml 컨테이너 접속 정보가 자동 주입된다 (spring-boot-docker-compose)
+    # 테스트: Testcontainers(@ServiceConnection)가 주입한다
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: Asia/Seoul
+  flyway:
+    enabled: true
+  jackson:
+    time-zone: Asia/Seoul
+
+evision:
+  evcharger:
+    base-url: http://apis.data.go.kr/B552584/EvCharger
+    service-key: ${DATA_GO_KR_SERVICE_KEY:}
+    page-size: 9999
+    status-period-minutes: 10
+    connect-timeout: 5s
+    read-timeout: 60s
+    max-retries: 3
+    daily-call-limit: 950
+  collection:
+    status-cron: "0 */5 * * * *"
+    catalog-cron: "0 0 4 * * *"
+    enabled: true              # 로컬·테스트에서 스케줄러 끄기용
+  charger:
+    fast-rule:
+      min-output-kw: 50        # TODO(확인 필요): 팀 기준 확정
+      fast-type-codes: []      # TODO(확인 필요): 활용가이드 충전기 타입 코드표
+  aggregation:
+    cron: "0 2,32 * * * *"
+    min-valid-points: 3        # TODO(확인 필요): 박상현 님과 합의
+    interpolate: false
