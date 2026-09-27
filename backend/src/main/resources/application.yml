@@ -47,6 +47,9 @@ evision:
     fast-rule:
       min-output-kw: 50        # TODO(확인 필요): 팀 기준 확정
       fast-type-codes: []      # TODO(확인 필요): 활용가이드 충전기 타입 코드표
+  reference:
+    load-on-startup: false     # true면 앱 시작 시 기준 데이터(노선·휴게소·IC)와 검증된 매핑 적재
+    location: classpath:reference/
   aggregation:
     cron: "0 2,32 * * * *"
     min-valid-points: 3        # TODO(확인 필요): 박상현 님과 합의
