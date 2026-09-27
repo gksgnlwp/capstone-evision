@@ -1,6 +1,7 @@
 package com.evision.collection.service;
 
 import java.sql.Statement;
+import java.sql.Types;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -34,8 +35,9 @@ public class StateChangePersister {
 
     static final String INSERT_HISTORY = """
             INSERT INTO charger_status_history
-              (charger_id, status_code, status_updated_at, source_api, run_id, collected_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+              (charger_id, status_code, status_updated_at, last_charge_start, last_charge_end, now_charge_start,
+               source_api, run_id, collected_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (charger_id, status_updated_at) DO NOTHING
             """;
 
@@ -94,9 +96,12 @@ public class StateChangePersister {
             ps.setLong(1, s.chargerId());
             ps.setString(2, s.statusCode());
             ps.setObject(3, s.statusUpdatedAt());
-            ps.setString(4, SourceApi.STATUS.name());
-            ps.setLong(5, runId);
-            ps.setObject(6, collectedAt);
+            ps.setObject(4, s.lastChargeStart(), Types.TIMESTAMP);
+            ps.setObject(5, s.lastChargeEnd(), Types.TIMESTAMP);
+            ps.setObject(6, s.nowChargeStart(), Types.TIMESTAMP);
+            ps.setString(7, SourceApi.STATUS.name());
+            ps.setLong(8, runId);
+            ps.setObject(9, collectedAt);
         });
         for (int[] chunk : results) {
             for (int affected : chunk) {

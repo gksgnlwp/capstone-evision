@@ -86,6 +86,18 @@ class StateChangePersisterTest {
     }
 
     @Test
+    void 충전_시각_항목도_이력에_저장한다() {
+        LocalDateTime nowStart = LocalDateTime.of(2026, 9, 27, 9, 40, 0);
+        persister.persist(runId, List.of(
+                new NormalizedState(chargerA, "3", NormalizedStatus.CHARGING, T1, null, null, nowStart)), COLLECTED_AT);
+
+        Map<String, Object> row = jdbc.queryForMap(
+                "SELECT last_charge_start, now_charge_start FROM charger_status_history WHERE charger_id = ?", chargerA);
+        assertThat(row.get("last_charge_start")).isNull();
+        assertThat(row.get("now_charge_start").toString()).startsWith("2026-09-27 09:40");
+    }
+
+    @Test
     void 현재_상태를_최신값으로_갱신한다() {
         persister.persist(runId, List.of(state(chargerA, "2", T1), state(chargerA, "3", T2)), COLLECTED_AT);
 

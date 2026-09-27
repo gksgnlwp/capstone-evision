@@ -73,6 +73,28 @@ class StateNormalizerTest {
     }
 
     @Test
+    void 충전_시각_항목을_파싱하고_빈값이나_형식오류는_null로_둔다() {
+        NormalizationResult result = normalizer.normalize(List.of(
+                new StatusItem("ME", "ME000001", "01", "3", "20260927101500",
+                        "20260925203207", "", "20260927100000"),
+                new StatusItem("ME", "ME000001", "02", "2", "20260927101500",
+                        "bad-value", null, " ")), chargerIds, codes);
+
+        assertThat(result.invalidCount()).isZero();
+        assertThat(result.states()).satisfiesExactly(
+                s -> {
+                    assertThat(s.lastChargeStart()).isEqualTo(LocalDateTime.of(2026, 9, 25, 20, 32, 7));
+                    assertThat(s.lastChargeEnd()).isNull();
+                    assertThat(s.nowChargeStart()).isEqualTo(LocalDateTime.of(2026, 9, 27, 10, 0, 0));
+                },
+                s -> {
+                    assertThat(s.lastChargeStart()).isNull();
+                    assertThat(s.lastChargeEnd()).isNull();
+                    assertThat(s.nowChargeStart()).isNull();
+                });
+    }
+
+    @Test
     void 앞뒤_공백은_제거하고_대조한다() {
         NormalizationResult result = normalizer.normalize(List.of(
                 item(" ME000001 ", "01 ", " 2", "20260927101500")), chargerIds, codes);

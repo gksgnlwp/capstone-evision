@@ -49,7 +49,10 @@ public class ChargerStatusHistory {
     @Column(name = "status_updated_at", nullable = false)
     private LocalDateTime statusUpdatedAt;
 
-    /** INFO 수집분에만 존재 */
+    /**
+     * 충전 시각 3개 항목은 명세상 INFO 수집분에만 있지만, 실제 STATUS 응답에도 와서 함께 저장한다.
+     * 원천에 값이 없으면 null.
+     */
     @Column(name = "last_charge_start")
     private LocalDateTime lastChargeStart;
 

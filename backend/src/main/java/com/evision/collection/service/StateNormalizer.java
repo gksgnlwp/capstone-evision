@@ -54,7 +54,11 @@ public class StateNormalizer {
             }
 
             NormalizedStatus normalized = statusCodes.getOrDefault(stat, NormalizedStatus.UNKNOWN);
-            states.add(new NormalizedState(chargerId, stat, normalized, updatedAt));
+            // 충전 시각 항목은 부가 정보라 없거나 형식이 틀려도 레코드를 버리지 않고 null로 둔다.
+            states.add(new NormalizedState(chargerId, stat, normalized, updatedAt,
+                    parseDateTime(trim(item.lastTsdt())),
+                    parseDateTime(trim(item.lastTedt())),
+                    parseDateTime(trim(item.nowTsdt()))));
         }
         return new NormalizationResult(states, unknown, invalid);
     }
