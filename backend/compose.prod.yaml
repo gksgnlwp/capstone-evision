@@ -36,6 +36,10 @@ services:
       DB_PASSWORD: ${POSTGRES_PASSWORD}
       DATA_GO_KR_SERVICE_KEY: ${DATA_GO_KR_SERVICE_KEY}
       TZ: Asia/Seoul
+      # 기준 데이터·검증된 매핑은 멱등이라 기동할 때마다 적재한다 (CSV 변경이 배포와 함께 반영됨)
+      EVISION_REFERENCE_LOAD_ON_STARTUP: ${EVISION_REFERENCE_LOAD_ON_STARTUP:-true}
+      # 기동 시 최근 N일 30분 구간 재집계 (멱등)
+      EVISION_AGGREGATION_BACKFILL_DAYS: ${EVISION_AGGREGATION_BACKFILL_DAYS:-2}
     ports:
       - "8080:8080"
     logging:
