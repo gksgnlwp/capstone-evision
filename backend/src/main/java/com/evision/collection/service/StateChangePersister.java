@@ -57,9 +57,18 @@ public class StateChangePersister {
         this.batchSize = properties.persistBatchSize();
     }
 
-    /** OP-12 persistStateChanges */
+    /** OP-12 persistStateChanges (상태 수집분) */
     @Transactional
     public PersistResult persist(long runId, List<NormalizedState> states, LocalDateTime collectedAt) {
+        return persist(runId, states, collectedAt, SourceApi.STATUS);
+    }
+
+    /**
+     * OP-12 persistStateChanges. 기본정보 갱신(OP-09)도 응답의 상태 항목을 source_api=INFO로 여기서 적재한다.
+     * 호출한 쪽에 트랜잭션이 있으면 그 트랜잭션에 참여한다.
+     */
+    @Transactional
+    public PersistResult persist(long runId, List<NormalizedState> states, LocalDateTime collectedAt, SourceApi sourceApi) {
         Map<HistoryKey, NormalizedState> unique = new LinkedHashMap<>();
         Map<HistoryKey, Integer> occurrences = new HashMap<>();
         Set<HistoryKey> conflicted = new HashSet<>();
@@ -83,14 +92,14 @@ public class StateChangePersister {
 
         List<NormalizedState> rows = new ArrayList<>(unique.values());
         int inBatchDuplicates = states.size() - conflictCount - rows.size();
-        int inserted = insertHistory(runId, rows, collectedAt);
+        int inserted = insertHistory(runId, rows, collectedAt, sourceApi);
         int duplicates = inBatchDuplicates + (rows.size() - inserted);
 
         updateCurrentStatus(rows);
         return new PersistResult(inserted, duplicates, conflictCount);
     }
 
-    private int insertHistory(long runId, List<NormalizedState> rows, LocalDateTime collectedAt) {
+    private int insertHistory(long runId, List<NormalizedState> rows, LocalDateTime collectedAt, SourceApi sourceApi) {
         int inserted = 0;
         int[][] results = jdbc.batchUpdate(INSERT_HISTORY, rows, batchSize, (ps, s) -> {
             ps.setLong(1, s.chargerId());
@@ -99,7 +108,7 @@ public class StateChangePersister {
             ps.setObject(4, s.lastChargeStart(), Types.TIMESTAMP);
             ps.setObject(5, s.lastChargeEnd(), Types.TIMESTAMP);
             ps.setObject(6, s.nowChargeStart(), Types.TIMESTAMP);
-            ps.setString(7, SourceApi.STATUS.name());
+            ps.setString(7, sourceApi.name());
             ps.setLong(8, runId);
             ps.setObject(9, collectedAt);
         });

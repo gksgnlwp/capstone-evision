@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,6 +23,7 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
 import com.evision.external.evcharger.dto.EvChargerPage;
+import com.evision.external.evcharger.dto.InfoItem;
 import com.evision.external.evcharger.dto.StatusItem;
 
 /**
@@ -38,6 +40,9 @@ public class EvChargerClient {
 
     public static final String BUDGET_EXCEEDED = "BUDGET_EXCEEDED";
     public static final String CONFIG_MISSING = "CONFIG_MISSING";
+
+    private static final String GET_CHARGER_STATUS = "getChargerStatus";
+    private static final String GET_CHARGER_INFO = "getChargerInfo";
 
     private final RestClient restClient;
     private final EvChargerProperties properties;
@@ -61,32 +66,50 @@ public class EvChargerClient {
     }
 
     /**
-     * OP-10 전국 충전기 상태를 모든 페이지에 걸쳐 조회한다.
-     *
-     * <ul>
-     *   <li>페이지는 {@code 수신 건수 >= totalCount}가 될 때까지 순회한다.</li>
-     *   <li>페이지마다 최대 maxRetries번 지수 백오프로 재시도한다. 전체 소요는 statusTimeBudget을 넘기지 않는다.</li>
-     *   <li>호출 수가 callAllowance에 도달하면 중단한다 (일일 한도 가드).</li>
-     * </ul>
+     * OP-10 전국 충전기 상태 변경분을 모든 페이지에 걸쳐 조회한다.
      *
      * @param callAllowance 이번 회차에 쓸 수 있는 최대 호출 수
      */
     public StatusFetchResult fetchAllStatus(int callAllowance) {
+        Map<String, String> params = new LinkedHashMap<>();
+        params.put("period", String.valueOf(properties.statusPeriodMinutes()));
+        List<StatusItem> items = new ArrayList<>();
+        FetchSummary summary = fetchPages(GET_CHARGER_STATUS, params, StatusItem.class, callAllowance,
+                properties.statusTimeBudget(), page -> items.addAll(page.items()));
+        return StatusFetchResult.of(items, summary);
+    }
+
+    /**
+     * OP-09 전국 충전소·충전기 정보를 페이지 단위로 받아 바로 넘긴다.
+     * 전국 약 53만 기라 전체를 메모리에 모으지 않는다.
+     * pageHandler에서 예외가 나면 순회를 멈추고 {@link PageHandlingException}으로 감싸 던진다.
+     */
+    public FetchSummary fetchAllInfo(int callAllowance, Consumer<List<InfoItem>> pageHandler) {
+        return fetchPages(GET_CHARGER_INFO, new LinkedHashMap<>(), InfoItem.class, callAllowance,
+                properties.infoTimeBudget(), page -> pageHandler.accept(page.items()));
+    }
+
+    /**
+     * 페이지는 {@code 수신 건수 >= totalCount}가 될 때까지 순회한다.
+     * 페이지마다 최대 maxRetries번 지수 백오프로 재시도하고, 전체 소요는 timeBudget을 넘기지 않는다.
+     * 호출 수가 callAllowance에 도달하면 중단한다 (일일 한도 가드).
+     */
+    private <T> FetchSummary fetchPages(String operation, Map<String, String> extraParams, Class<T> itemType,
+            int callAllowance, Duration timeBudget, Consumer<EvChargerPage<T>> onPage) {
         if (!properties.hasServiceKey()) {
-            return new StatusFetchResult(List.of(), null, 0, 0, 0, false,
-                    CONFIG_MISSING, "DATA_GO_KR_SERVICE_KEY가 설정되지 않았습니다.");
+            return new FetchSummary(null, 0, 0, 0, 0, false, CONFIG_MISSING, "DATA_GO_KR_SERVICE_KEY가 설정되지 않았습니다.");
         }
 
-        Instant deadline = clock.instant().plus(properties.statusTimeBudget());
-        List<StatusItem> items = new ArrayList<>();
+        Instant deadline = clock.instant().plus(timeBudget);
         Integer totalCount = null;
+        int fetched = 0;
         int calls = 0;
         int retries = 0;
         int pages = 0;
         int pageNo = 1;
 
         while (true) {
-            EvChargerPage<StatusItem> page = null;
+            EvChargerPage<T> page = null;
             EvChargerApiException lastError = null;
 
             for (int attempt = 0; attempt <= properties.maxRetries(); attempt++) {
@@ -103,17 +126,17 @@ public class EvChargerClient {
                     retries++;
                 }
                 if (calls >= callAllowance) {
-                    return new StatusFetchResult(items, totalCount, calls, retries, pages, false,
+                    return new FetchSummary(totalCount, fetched, calls, retries, pages, false,
                             BUDGET_EXCEEDED, "일일 호출 한도에 도달해 " + pageNo + "페이지부터 받지 못했습니다.");
                 }
 
                 calls++;
                 try {
-                    page = fetchStatusPage(pageNo);
+                    page = fetchPage(operation, extraParams, pageNo, itemType);
                     break;
                 } catch (EvChargerApiException e) {
                     lastError = e;
-                    log.warn("getChargerStatus {}페이지 실패 (시도 {}/{}): {}", pageNo, attempt + 1,
+                    log.warn("{} {}페이지 실패 (시도 {}/{}): {}", operation, pageNo, attempt + 1,
                             properties.maxRetries() + 1, e.getMessage());
                     if (!e.retryable()) {
                         break;
@@ -122,27 +145,33 @@ public class EvChargerClient {
             }
 
             if (page == null) {
-                return new StatusFetchResult(items, totalCount, calls, retries, pages, false,
+                return new FetchSummary(totalCount, fetched, calls, retries, pages, false,
                         lastError.errorCode(), pageNo + "페이지 수신 실패: " + lastError.getMessage());
             }
 
             pages++;
             totalCount = page.totalCount();
-            items.addAll(page.items());
-            if (page.items().isEmpty() || items.size() >= totalCount) {
-                return new StatusFetchResult(items, totalCount, calls, retries, pages, true, null, null);
+            fetched += page.items().size();
+            try {
+                onPage.accept(page);
+            } catch (RuntimeException e) {
+                throw new PageHandlingException(new FetchSummary(totalCount, fetched, calls, retries, pages, false,
+                        null, pageNo + "페이지 처리 실패"), e);
+            }
+            if (page.items().isEmpty() || fetched >= totalCount) {
+                return new FetchSummary(totalCount, fetched, calls, retries, pages, true, null, null);
             }
             pageNo++;
         }
     }
 
-    private EvChargerPage<StatusItem> fetchStatusPage(int pageNo) {
+    private <T> EvChargerPage<T> fetchPage(String operation, Map<String, String> extraParams, int pageNo, Class<T> itemType) {
         Map<String, String> params = new LinkedHashMap<>();
         params.put("pageNo", String.valueOf(pageNo));
         params.put("numOfRows", String.valueOf(properties.pageSize()));
-        params.put("period", String.valueOf(properties.statusPeriodMinutes()));
+        params.putAll(extraParams);
         params.put("dataType", "JSON");
-        return parser.parse(get("getChargerStatus", params), StatusItem.class);
+        return parser.parse(get(operation, params), itemType);
     }
 
     private String get(String operation, Map<String, String> params) {

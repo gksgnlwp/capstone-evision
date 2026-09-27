@@ -20,6 +20,7 @@ public record EvChargerProperties(
         @DefaultValue("3") int maxRetries,
         @DefaultValue("2s") Duration retryInitialBackoff,
         @DefaultValue("4m") Duration statusTimeBudget,
+        @DefaultValue("60m") Duration infoTimeBudget,
         @DefaultValue("950") int dailyCallLimit) {
 
     public boolean hasServiceKey() {

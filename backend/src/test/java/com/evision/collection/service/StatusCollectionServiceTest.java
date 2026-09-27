@@ -2,84 +2,33 @@ package com.evision.collection.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.io.IOException;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 
-import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Import;
-import org.springframework.context.annotation.Primary;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
 
-import com.evision.TestcontainersConfiguration;
-import com.evision.external.evcharger.Sleeper;
-import com.evision.support.TestDb;
+import com.evision.support.EvChargerApiIntegrationTest;
 
 import okhttp3.mockwebserver.MockResponse;
-import okhttp3.mockwebserver.MockWebServer;
 import okhttp3.mockwebserver.RecordedRequest;
 
 /**
- * 상태 수집 전체 흐름: MockWebServer(외부 API) + Testcontainers(PostgreSQL).
- * 페이지 크기 2, 페이지당 최대 3회 시도(재시도 2회)로 설정한다.
+ * OP-10 상태 수집 전체 흐름.
  */
-@SpringBootTest
-@Import({TestcontainersConfiguration.class, StatusCollectionServiceTest.NoSleepConfig.class})
-class StatusCollectionServiceTest {
-
-    static final MockWebServer server = new MockWebServer();
-
-    @DynamicPropertySource
-    static void properties(DynamicPropertyRegistry registry) {
-        registry.add("evision.evcharger.base-url", () -> server.url("/B552584/EvCharger").toString());
-        registry.add("evision.evcharger.service-key", () -> "test+key/=");
-        registry.add("evision.evcharger.page-size", () -> "2");
-        registry.add("evision.evcharger.max-retries", () -> "2");
-    }
-
-    @TestConfiguration
-    static class NoSleepConfig {
-        @Bean
-        @Primary
-        Sleeper noSleep() {
-            return duration -> { };
-        }
-    }
-
-    @AfterAll
-    static void shutdown() throws IOException {
-        server.shutdown();
-    }
+class StatusCollectionServiceTest extends EvChargerApiIntegrationTest {
 
     @Autowired
     StatusCollectionService service;
-    @Autowired
-    ChargerKeyCache chargerKeyCache;
-    @Autowired
-    JdbcTemplate jdbc;
 
-    TestDb db;
     long chargerA;
     long chargerB;
-    int requestsBefore;
 
     @BeforeEach
     void setUp() {
-        db = new TestDb(jdbc);
-        db.clear();
         long stationId = db.station("ME000001");
         chargerA = db.charger(stationId, "01");
         chargerB = db.charger(stationId, "02");
-        chargerKeyCache.invalidate();
-        requestsBefore = server.getRequestCount();
     }
 
     @Test
@@ -92,7 +41,8 @@ class StatusCollectionServiceTest {
 
         service.collectChargerStates();
 
-        assertThat(lastRun()).containsEntry("run_status", "SUCCESS")
+        assertThat(lastRun()).containsEntry("run_type", "STATUS")
+                .containsEntry("run_status", "SUCCESS")
                 .containsEntry("api_call_count", 2)
                 .containsEntry("total_count", 3)
                 .containsEntry("fetched_count", 3)
@@ -191,7 +141,7 @@ class StatusCollectionServiceTest {
         assertThat(lastRun()).containsEntry("run_status", "FAILED")
                 .containsEntry("error_code", "BUDGET_EXCEEDED")
                 .containsEntry("api_call_count", 0);
-        assertThat(server.getRequestCount()).isEqualTo(requestsBefore);
+        assertThat(requestsSinceStart()).isZero();
     }
 
     @Test
@@ -210,32 +160,7 @@ class StatusCollectionServiceTest {
         takeRequests(1);
     }
 
-    private Map<String, Object> lastRun() {
-        return jdbc.queryForMap("SELECT * FROM collection_run ORDER BY run_id DESC LIMIT 1");
-    }
-
-    private String currentCode(long chargerId) {
-        return jdbc.queryForObject("SELECT current_status_code FROM charger WHERE charger_id = ?", String.class, chargerId);
-    }
-
-    /** 이번 테스트에서 보낸 요청을 모두 꺼낸다. 다음 테스트로 새지 않게 개수도 확인한다. */
-    private RecordedRequest[] takeRequests(int expected) throws InterruptedException {
-        assertThat(server.getRequestCount() - requestsBefore).isEqualTo(expected);
-        RecordedRequest[] requests = new RecordedRequest[expected];
-        for (int i = 0; i < expected; i++) {
-            requests[i] = server.takeRequest(1, TimeUnit.SECONDS);
-        }
-        return requests;
-    }
-
-    private static MockResponse page(int totalCount, String... items) {
-        String body = """
-                {"resultCode":"00","resultMsg":"NORMAL SERVICE.","totalCount":%d,"items":{"item":[%s]}}
-                """.formatted(totalCount, String.join(",", items));
-        return new MockResponse().setHeader("Content-Type", "application/json").setBody(body);
-    }
-
-    private static String item(String statId, String chgerId, String stat, String statUpdDt) {
+    static String item(String statId, String chgerId, String stat, String statUpdDt) {
         return """
                 {"busiId":"ME","statId":"%s","chgerId":"%s","stat":"%s","statUpdDt":"%s"}
                 """.formatted(statId, chgerId, stat, statUpdDt);

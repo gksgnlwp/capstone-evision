@@ -19,6 +19,10 @@ spring:
     enabled: true
   jackson:
     time-zone: Asia/Seoul
+  task:
+    scheduling:
+      pool:
+        size: 2                # 기본정보 갱신(수십 분)이 5분 상태 수집을 막지 않게
 
 evision:
   evcharger:
@@ -31,6 +35,7 @@ evision:
     max-retries: 3
     retry-initial-backoff: 2s  # 지수 백오프 시작값 (2s → 4s → 8s)
     status-time-budget: 4m     # 상태 수집 1회 전체 소요 상한 (5분 주기와 겹치지 않게)
+    info-time-budget: 60m      # 기본정보 갱신 1회 전체 소요 상한 (전국 약 53페이지)
     daily-call-limit: 950
   collection:
     status-cron: "0 */5 * * * *"

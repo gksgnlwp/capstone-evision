@@ -19,4 +19,9 @@ public record StatusFetchResult(
         boolean complete,
         String errorCode,
         String errorMessage) {
+
+    static StatusFetchResult of(List<StatusItem> items, FetchSummary summary) {
+        return new StatusFetchResult(items, summary.totalCount(), summary.apiCallCount(), summary.retryCount(),
+                summary.pagesReceived(), summary.complete(), summary.errorCode(), summary.errorMessage());
+    }
 }

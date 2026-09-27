@@ -21,7 +21,7 @@ class ApiCallBudgetTest {
     CollectionRunRepository repository = mock(CollectionRunRepository.class);
     // 2026-09-27 01:30 KST (UTC 기준으로는 전날 16:30)
     Clock clock = Clock.fixed(Instant.parse("2026-09-26T16:30:00Z"), TimeConfig.KST);
-    EvChargerProperties properties = new EvChargerProperties(null, null, 9999, 10, null, null, 3, null, null, 950);
+    EvChargerProperties properties = new EvChargerProperties(null, null, 9999, 10, null, null, 3, null, null, null, 950);
     ApiCallBudget budget = new ApiCallBudget(repository, properties, clock);
 
     @Test
