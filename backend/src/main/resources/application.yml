@@ -29,11 +29,14 @@ evision:
     connect-timeout: 5s
     read-timeout: 60s
     max-retries: 3
+    retry-initial-backoff: 2s  # 지수 백오프 시작값 (2s → 4s → 8s)
+    status-time-budget: 4m     # 상태 수집 1회 전체 소요 상한 (5분 주기와 겹치지 않게)
     daily-call-limit: 950
   collection:
     status-cron: "0 */5 * * * *"
     catalog-cron: "0 0 4 * * *"
     enabled: true              # 로컬·테스트에서 스케줄러 끄기용
+    persist-batch-size: 1000   # 이력 적재 JDBC 배치 크기
   charger:
     fast-rule:
       min-output-kw: 50        # TODO(확인 필요): 팀 기준 확정

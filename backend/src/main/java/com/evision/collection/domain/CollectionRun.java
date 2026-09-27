@@ -74,4 +74,47 @@ public class CollectionRun {
 
     @Column(name = "error_message", columnDefinition = "text")
     private String errorMessage;
+
+    private static final int MAX_ERROR_MESSAGE_LENGTH = 2000;
+
+    public static CollectionRun start(RunType runType, LocalDateTime startedAt) {
+        CollectionRun run = new CollectionRun();
+        run.runType = runType;
+        run.startedAt = startedAt;
+        run.runStatus = RunStatus.RUNNING;
+        return run;
+    }
+
+    public void finish(RunStatus status, LocalDateTime endedAt, RunCounts counts, String errorCode, String errorMessage) {
+        if (status == RunStatus.RUNNING) {
+            throw new IllegalArgumentException("종료 상태로 RUNNING을 쓸 수 없습니다.");
+        }
+        this.runStatus = status;
+        this.endedAt = endedAt;
+        this.apiCallCount = (short) Math.min(counts.apiCallCount(), Short.MAX_VALUE);
+        this.totalCount = counts.totalCount();
+        this.fetchedCount = counts.fetchedCount();
+        this.insertedCount = counts.insertedCount();
+        this.duplicateCount = counts.duplicateCount();
+        this.unknownCount = counts.unknownCount();
+        this.invalidCount = counts.invalidCount();
+        this.retryCount = (short) Math.min(counts.retryCount(), Short.MAX_VALUE);
+        this.errorCode = errorCode;
+        this.errorMessage = truncate(errorMessage);
+    }
+
+    /** 앱 재시작 시 RUNNING으로 남은 회차를 FAILED(ABORTED)로 정리한다. */
+    public void abort(LocalDateTime endedAt) {
+        this.runStatus = RunStatus.FAILED;
+        this.endedAt = endedAt;
+        this.errorCode = "ABORTED";
+        this.errorMessage = "앱 재시작 시 RUNNING 상태로 남아 있던 회차";
+    }
+
+    private static String truncate(String message) {
+        if (message == null || message.length() <= MAX_ERROR_MESSAGE_LENGTH) {
+            return message;
+        }
+        return message.substring(0, MAX_ERROR_MESSAGE_LENGTH);
+    }
 }
