@@ -3,6 +3,8 @@ package com.evision.reference;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.List;
 import java.util.Map;
 
@@ -11,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import com.evision.TestcontainersConfiguration;
@@ -32,12 +35,24 @@ class ReferenceDataLoaderTest {
     long stationId;
 
     @BeforeEach
-    void setUp() {
+    void setUp() throws IOException {
         db = new TestDb(jdbc);
         db.clear();
         jdbc.execute("TRUNCATE route, rest_area, interchange RESTART IDENTITY CASCADE");
+        // 실제 매핑 파일이 가리키는 충전소를 먼저 만들어야 loadAll()이 매핑까지 적재할 수 있다
+        for (String statId : mappedStatIds()) {
+            db.station(statId);
+        }
         loader.loadAll();
+        // 아래 개별 매핑 테스트는 빈 매핑에서 시작한다
+        jdbc.execute("DELETE FROM station_access");
         stationId = db.station("ME000001");
+    }
+
+    private static List<String> mappedStatIds() throws IOException {
+        try (InputStream in = new ClassPathResource("reference/station_access.csv").getInputStream()) {
+            return CsvReader.read(in).stream().map(row -> row.get("stat_id")).distinct().toList();
+        }
     }
 
     @Test
@@ -49,6 +64,9 @@ class ReferenceDataLoaderTest {
         assertThat(report.restAreasSkipped()).isZero();
         assertThat(report.interchanges()).isEqualTo(659);
         assertThat(report.interchangesSkipped()).isZero();
+        // 검증된 매핑이 모두 휴게소·IC와 연결된다
+        int mappingRows = jdbc.queryForObject("SELECT count(*) FROM station_access", Integer.class);
+        assertThat(report.accessUpserted()).isEqualTo(mappingRows).isPositive();
         // 다시 실행해도 행 수가 같다
         assertThat(db.count("route")).isEqualTo(37);
         assertThat(db.count("rest_area")).isEqualTo(210);

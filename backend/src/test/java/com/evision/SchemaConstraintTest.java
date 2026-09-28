@@ -12,6 +12,8 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.evision.support.TestDb;
+
 /**
  * V1·V2 마이그레이션의 초기 데이터와 station_access CHECK 제약을 검증한다.
  */
@@ -29,6 +31,9 @@ class SchemaConstraintTest {
 
     @BeforeEach
     void setUp() {
+        // 다른 테스트가 남긴 데이터와 겹치지 않게 비우고 시작한다
+        new TestDb(jdbc).clear();
+        jdbc.execute("TRUNCATE route, rest_area, interchange RESTART IDENTITY CASCADE");
         long routeId = jdbc.queryForObject(
                 "INSERT INTO route (route_no, route_name) VALUES ('0010', '경부선') RETURNING route_id", Long.class);
         restAreaId = jdbc.queryForObject("""
