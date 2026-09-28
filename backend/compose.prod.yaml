@@ -1,0 +1,52 @@
+# 상시 가동용 구성: PostgreSQL + 백엔드 앱. 꺼지면 자동으로 다시 켜진다.
+#   실행: docker compose -f compose.prod.yaml up -d --build
+#   로그: docker compose -f compose.prod.yaml logs -f app
+#   중지: docker compose -f compose.prod.yaml down   (데이터 볼륨은 남는다)
+# 접속 정보와 인증키는 같은 폴더의 .env에서 읽는다 (.env.example 참고, .env는 커밋하지 않음)
+#
+# 로컬 개발용 compose.yaml과 서비스 이름·볼륨 이름이 같아서, 같은 PC에서는 같은 DB 데이터를 이어서 쓴다.
+services:
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      TZ: Asia/Seoul
+    ports:
+      - "127.0.0.1:5432:5432"   # 서버에서는 외부에 열지 않는다
+    volumes:
+      - evision-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+      DB_USERNAME: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DATA_GO_KR_SERVICE_KEY: ${DATA_GO_KR_SERVICE_KEY}
+      TZ: Asia/Seoul
+      # 기준 데이터·검증된 매핑은 멱등이라 기동할 때마다 적재한다 (CSV 변경이 배포와 함께 반영됨)
+      EVISION_REFERENCE_LOAD_ON_STARTUP: ${EVISION_REFERENCE_LOAD_ON_STARTUP:-true}
+      # 기동 시 최근 N일 30분 구간 재집계 (멱등)
+      EVISION_AGGREGATION_BACKFILL_DAYS: ${EVISION_AGGREGATION_BACKFILL_DAYS:-2}
+    ports:
+      - "8080:8080"
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+volumes:
+  evision-pgdata:
