@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 
 import com.evision.recommend.AvailabilityPredictor.Basis;
 import com.evision.recommend.AvailabilityPredictor.CurrentStatus;
+import com.evision.recommend.AvailabilityPredictor.Forecast;
 import com.evision.recommend.AvailabilityPredictor.Prediction;
 import com.evision.recommend.AvailabilityPredictor.Settings;
 import com.evision.recommend.AvailabilityPredictor.WindowSample;
@@ -42,7 +43,7 @@ class AvailabilityPredictorTest {
         Prediction p = predictor.predict(NOW, ETA_MON, null, samples);
 
         // p4 = (1+4·0.7)/5 = 0.76, p3 = (1+4·0.76)/5 = 0.808, p2 = 0.8464, p1 = 0.87712
-        assertThat(p.historical()).isCloseTo(0.87712, within(1e-9));
+        assertThat(p.baseline()).isCloseTo(0.87712, within(1e-9));
         assertThat(p.basis()).isEqualTo(Basis.SAME_DAY_SLOT);
         assertThat(p.basisSampleCount()).isEqualTo(1);
     }
@@ -56,7 +57,7 @@ class AvailabilityPredictorTest {
 
         Prediction p = predictor.predict(NOW, ETA_MON, null, samples);
 
-        assertThat(p.historical()).isLessThan(0.05);
+        assertThat(p.baseline()).isLessThan(0.05);
     }
 
     @Test
@@ -74,7 +75,7 @@ class AvailabilityPredictorTest {
 
         assertThat(monday.basis()).isEqualTo(Basis.SAME_DAY_TYPE_SLOT);   // 월요일 표본은 없지만 평일 표본은 있다
         assertThat(saturday.basis()).isEqualTo(Basis.SAME_DAY_SLOT);
-        assertThat(saturday.historical()).isGreaterThan(monday.historical());
+        assertThat(saturday.baseline()).isGreaterThan(monday.baseline());
     }
 
     @Test
@@ -86,7 +87,7 @@ class AvailabilityPredictorTest {
         Prediction p = predictor.predict(NOW, ETA_MON, null, samples);
 
         assertThat(p.basis()).isEqualTo(Basis.STATION_ALL);
-        assertThat(p.historical()).isLessThan(0.7);
+        assertThat(p.baseline()).isLessThan(0.7);
     }
 
     @Test
@@ -96,7 +97,7 @@ class AvailabilityPredictorTest {
         Prediction p = predictor.predict(NOW, ETA_MON, null, samples);
 
         assertThat(p.basis()).isEqualTo(Basis.PRIOR);
-        assertThat(p.historical()).isEqualTo(0.7);
+        assertThat(p.baseline()).isEqualTo(0.7);
     }
 
     @Test
@@ -143,6 +144,39 @@ class AvailabilityPredictorTest {
         assertThat(new CurrentStatus(0, 0, 3, 0).probability()).isEqualTo(0.0);   // 전부 고장
         assertThat(new CurrentStatus(0, 2, 0, 1).probability()).isNull();
         assertThat(new CurrentStatus(0, 0, 0, 0).probability()).isNull();          // 급속충전기 없음
+    }
+
+    @Test
+    void AI_예측이_있으면_과거_통계_대신_쓴다() {
+        List<WindowSample> samples = List.of(sample(2026, 9, 28, 14, 0, true));   // 통계로는 0.87712
+
+        Prediction p = predictor.predict(NOW, ETA_MON, null, samples, new Forecast(0.2, "lgbm-v1"));
+
+        assertThat(p.basis()).isEqualTo(Basis.AI_FORECAST);
+        assertThat(p.baseline()).isEqualTo(0.2);
+        assertThat(p.probability()).isEqualTo(0.2);
+        assertThat(p.statistical()).isCloseTo(0.87712, within(1e-9));   // 비교용으로 남는다
+        assertThat(p.modelVersion()).isEqualTo("lgbm-v1");
+    }
+
+    @Test
+    void AI_예측도_실시간_상태와_도착_시간으로_섞는다() {
+        Prediction p = predictor.predict(NOW, NOW.plusMinutes(30), new CurrentStatus(2, 0, 0, 0), List.of(),
+                new Forecast(0.4, "lgbm-v1"));
+
+        double alpha = Math.exp(-1);
+        assertThat(p.probability()).isCloseTo(alpha * 1.0 + (1 - alpha) * 0.4, within(1e-9));
+    }
+
+    @Test
+    void AI_예측_확률이_범위를_벗어나면_0과_1로_자른다() {
+        assertThat(predictor.predict(NOW, ETA_MON, null, List.of(), new Forecast(1.3, "v")).baseline()).isEqualTo(1.0);
+        assertThat(predictor.predict(NOW, ETA_MON, null, List.of(), new Forecast(-0.1, "v")).baseline()).isZero();
+    }
+
+    @Test
+    void AI_예측이_없으면_모델_버전은_NULL() {
+        assertThat(predictor.predict(NOW, ETA_MON, null, List.of()).modelVersion()).isNull();
     }
 
     @Test

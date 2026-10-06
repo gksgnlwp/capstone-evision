@@ -1,12 +1,14 @@
 package com.evision.recommend;
 
 import static com.evision.aggregation.domain.QOccupancy30m.occupancy30m;
+import static com.evision.forecast.domain.QOccupancyForecast.occupancyForecast;
 import static com.evision.reference.domain.QInterchange.interchange;
 import static com.evision.reference.domain.QRestArea.restArea;
 import static com.evision.station.domain.QCharger.charger;
 import static com.evision.station.domain.QStation.station;
 import static com.evision.station.domain.QStationAccess.stationAccess;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
@@ -83,6 +85,26 @@ public class RecommendRepository {
                         occupancy30m.station.id, occupancy30m.windowStart, occupancy30m.available))
                 .from(occupancy30m)
                 .where(occupancy30m.station.id.in(stationIds), occupancy30m.windowStart.goe(from))
+                .fetch();
+    }
+
+    public record ForecastRow(Long stationId, LocalDateTime targetWindowStart, BigDecimal pAvailable,
+            String modelVersion) {
+    }
+
+    /**
+     * [fromWindow, toWindow] 구간의 AI 예측 중 generatedAfter 이후에 만든 것만.
+     * UNIQUE (station_id, target_window_start) 인덱스를 탄다.
+     */
+    public List<ForecastRow> findForecasts(Collection<Long> stationIds, LocalDateTime fromWindow,
+            LocalDateTime toWindow, LocalDateTime generatedAfter) {
+        return query.select(Projections.constructor(ForecastRow.class,
+                        occupancyForecast.station.id, occupancyForecast.targetWindowStart,
+                        occupancyForecast.pAvailable, occupancyForecast.modelVersion))
+                .from(occupancyForecast)
+                .where(occupancyForecast.station.id.in(stationIds),
+                        occupancyForecast.targetWindowStart.between(fromWindow, toWindow),
+                        occupancyForecast.generatedAt.goe(generatedAfter))
                 .fetch();
     }
 

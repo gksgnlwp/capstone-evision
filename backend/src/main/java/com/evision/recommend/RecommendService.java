@@ -16,8 +16,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.evision.recommend.AvailabilityPredictor.CurrentStatus;
+import com.evision.recommend.AvailabilityPredictor.Forecast;
 import com.evision.recommend.AvailabilityPredictor.Prediction;
 import com.evision.recommend.AvailabilityPredictor.WindowSample;
+import com.evision.recommend.RecommendRepository.ForecastRow;
 import com.evision.recommend.RecommendRepository.OccupancyRow;
 import com.evision.recommend.RecommendRepository.OutputRow;
 import com.evision.recommend.RecommendScorer.Candidate;
@@ -36,7 +38,8 @@ import com.evision.station.query.StationQueryRepository.StatusCountRow;
  *
  * <p>노선 이정 데이터가 없어서 거리는 직선거리 × roadDistanceFactor 로 근사한다.
  * 한 충전소가 여러 접근지점에 매핑돼 있으면 (거리 + 우회) 가 가장 짧은 접근지점 하나로 본다.
- * 쿼리 수는 후보 건수와 관계없이 4회 (후보, 상태 집계, 최대 출력, 점유율 이력).
+ * 도착 구간의 AI 예측(occupancy_forecast)이 있고 forecastMaxAge 안에 만든 것이면 과거 통계 대신 쓴다.
+ * 쿼리 수는 후보 건수와 관계없이 5회 (후보, 상태 집계, 최대 출력, 점유율 이력, AI 예측).
  */
 @Service
 @Transactional(readOnly = true)
@@ -80,13 +83,20 @@ public class RecommendService {
                 .collect(Collectors.groupingBy(OccupancyRow::stationId,
                         Collectors.mapping(r -> new WindowSample(r.windowStart(), r.available()), Collectors.toList())));
 
+        Map<Long, LocalDateTime> etaWindows = new HashMap<>();
+        for (Located l : nearest.values()) {
+            etaWindows.put(l.station().getId(),
+                    AvailabilityPredictor.floorToWindow(now.plusMinutes(etaMinutes(l.travelKm()))));
+        }
+        Map<String, Forecast> forecasts = forecasts(ids, etaWindows, now);
+
         Map<Long, Prediction> predictions = new HashMap<>();
         List<Candidate> candidates = new ArrayList<>();
         for (Located l : nearest.values()) {
             long id = l.station().getId();
             CurrentStatus status = statuses.getOrDefault(id, new CurrentStatus(0, 0, 0, 0));
             Prediction p = predictor.predict(now, now.plusMinutes(etaMinutes(l.travelKm())), status,
-                    samples.getOrDefault(id, List.of()));
+                    samples.getOrDefault(id, List.of()), forecasts.get(forecastKey(id, etaWindows.get(id))));
             predictions.put(id, p);
             candidates.add(new Candidate(id, l.distanceKm(), l.detourKm(), p.probability(), outputs.get(id),
                     fastCount(status)));
@@ -99,6 +109,24 @@ public class RecommendService {
             items.add(toItem(items.size() + 1, nearest.get(id), s, predictions.get(id), statuses.get(id), now));
         }
         return new RecommendResponse(now, reachableKm, candidates.size(), result.unreachable().size(), items);
+    }
+
+    /** 충전소별 도착 구간의 신선한 AI 예측. 키는 forecastKey(충전소, 구간) */
+    private Map<String, Forecast> forecasts(List<Long> ids, Map<Long, LocalDateTime> etaWindows, LocalDateTime now) {
+        LocalDateTime from = etaWindows.values().stream().min(Comparator.naturalOrder()).orElseThrow();
+        LocalDateTime to = etaWindows.values().stream().max(Comparator.naturalOrder()).orElseThrow();
+        Map<String, Forecast> result = new HashMap<>();
+        for (ForecastRow r : repository.findForecasts(ids, from, to, now.minus(properties.forecastMaxAge()))) {
+            if (r.targetWindowStart().equals(etaWindows.get(r.stationId()))) {
+                result.put(forecastKey(r.stationId(), r.targetWindowStart()),
+                        new Forecast(r.pAvailable().doubleValue(), r.modelVersion()));
+            }
+        }
+        return result;
+    }
+
+    private static String forecastKey(long stationId, LocalDateTime window) {
+        return stationId + "@" + window;
     }
 
     /** 위치가 계산된 접근지점 */
@@ -181,7 +209,8 @@ public class RecommendService {
         return new RecommendResponse.Item(rank, st.getId(), st.getStatId(), st.getName(), st.getLatitude(),
                 st.getLongitude(), accessPoint(l.access()), round(l.distanceKm(), 1), round(l.detourKm(), 2),
                 (int) eta, now.plusMinutes(eta), round(p.probability(), 3), p.realtime(),
-                round(p.historical(), 3), p.basis(), p.basisSampleCount(), fastCount(cs), cs.available(),
+                round(p.baseline(), 3), round(p.statistical(), 3), p.basis(), p.basisSampleCount(),
+                p.modelVersion(), fastCount(cs), cs.available(),
                 cs.charging(), s.candidate().maxOutputKw(), round(s.score(), 3),
                 new RecommendResponse.Score(round(b.availability(), 3), round(b.detour(), 3), round(b.power(), 3),
                         round(b.capacity(), 3), round(b.progress(), 3)));
