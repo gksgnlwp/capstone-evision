@@ -4,11 +4,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -18,6 +20,7 @@ import org.junit.jupiter.api.Test;
 import com.evision.common.code.NormalizedStatus;
 import com.evision.common.time.TimeConfig;
 import com.evision.recommend.AvailabilityPredictor.Basis;
+import com.evision.recommend.RecommendRepository.ForecastRow;
 import com.evision.recommend.RecommendRepository.OccupancyRow;
 import com.evision.recommend.RecommendRepository.OutputRow;
 import com.evision.reference.domain.Interchange;
@@ -53,7 +56,7 @@ class RecommendServiceTest {
         service = new RecommendService(repository, stationQueryRepository,
                 new AvailabilityPredictor(AvailabilityPredictor.Settings.defaults()),
                 new RecommendScorer(RecommendScorer.Settings.defaults()),
-                new RecommendProperties(80, 1.3, 4), clock);
+                new RecommendProperties(80, 1.3, 4, Duration.ofMinutes(90)), clock);
 
         Route route = mock(Route.class);
         when(route.getId()).thenReturn(1L);
@@ -74,6 +77,7 @@ class RecommendServiceTest {
         when(repository.maxFastOutput(anyCollection())).thenReturn(List.of(
                 new OutputRow(1L, 100), new OutputRow(3L, 200)));
         when(repository.findOccupancy(anyCollection(), any())).thenReturn(List.of());
+        when(repository.findForecasts(anyCollection(), any(), any(), any())).thenReturn(List.of());
     }
 
     @Test
@@ -133,7 +137,29 @@ class RecommendServiceTest {
 
         assertThat(s3.basis()).isEqualTo(Basis.SAME_DAY_SLOT);
         assertThat(s3.basisSampleCount()).isEqualTo(3);
-        assertThat(s3.historicalProbability()).isLessThan(0.7);
+        assertThat(s3.baselineProbability()).isLessThan(0.7);
+        assertThat(s3.statisticalProbability()).isEqualTo(s3.baselineProbability());
+    }
+
+    @Test
+    void 도착_구간의_AI_예측이_있으면_통계_대신_쓴다() {
+        // S3 도착 13:56 → 13:30 구간, S1 도착 13:22 → 13:00 구간
+        when(repository.findForecasts(anyCollection(), eq(NOW), eq(NOW.plusMinutes(30)), eq(NOW.minusMinutes(90))))
+                .thenReturn(List.of(
+                        new ForecastRow(3L, NOW.plusMinutes(30), new BigDecimal("0.1000"), "lgbm-v1"),
+                        new ForecastRow(1L, NOW.plusMinutes(30), new BigDecimal("0.9000"), "lgbm-v1")));   // S1 도착 구간 아님
+
+        RecommendResponse r = service.recommend(condition(100, 37.0));
+
+        RecommendResponse.Item s3 = item(r, "ST000003");
+        assertThat(s3.basis()).isEqualTo(Basis.AI_FORECAST);
+        assertThat(s3.modelVersion()).isEqualTo("lgbm-v1");
+        assertThat(s3.baselineProbability()).isEqualTo(0.1);
+        assertThat(s3.statisticalProbability()).isEqualTo(0.7);   // 이력 없음 → 사전값, 비교용
+
+        RecommendResponse.Item s1 = item(r, "ST000001");
+        assertThat(s1.basis()).isEqualTo(Basis.PRIOR);
+        assertThat(s1.modelVersion()).isNull();
     }
 
     @Test
@@ -144,6 +170,10 @@ class RecommendServiceTest {
 
         assertThat(r.recommendations()).isEmpty();
         assertThat(r.candidateCount()).isZero();
+    }
+
+    private static RecommendResponse.Item item(RecommendResponse r, String statId) {
+        return r.recommendations().stream().filter(i -> i.statId().equals(statId)).findFirst().orElseThrow();
     }
 
     private static RecommendCondition condition(double rangeKm, Double destLat) {

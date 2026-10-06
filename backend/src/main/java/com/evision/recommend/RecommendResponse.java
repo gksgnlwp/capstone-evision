@@ -25,8 +25,10 @@ public record RecommendResponse(
      * @param distanceKm              현재 위치 → 접근지점 추정 도로거리 (직선거리 × 보정계수)
      * @param availabilityProbability 도착 시 가용 확률
      * @param realtimeProbability     현재 상태 기준 가용 (1 / 0 / 판단 불가 null)
-     * @param historicalProbability   과거 같은 시간대 기준 가용 확률
-     * @param basis                   과거 확률의 근거 수준 (SAME_DAY_SLOT … PRIOR)
+     * @param baselineProbability     실시간 상태를 빼고 본 도착 구간 가용 확률 (AI 예측, 없으면 과거 통계)
+     * @param statisticalProbability  과거 같은 시간대 통계 기준 가용 확률 (AI 예측과 비교용)
+     * @param basis                   baseline 근거 (AI_FORECAST 또는 SAME_DAY_SLOT … PRIOR)
+     * @param modelVersion            AI 예측을 썼으면 모델 버전, 아니면 null
      */
     public record Item(
             int rank,
@@ -42,9 +44,11 @@ public record RecommendResponse(
             LocalDateTime eta,
             double availabilityProbability,
             Double realtimeProbability,
-            double historicalProbability,
+            double baselineProbability,
+            double statisticalProbability,
             Basis basis,
             int basisSampleCount,
+            String modelVersion,
             int fastChargerCount,
             int availableCount,
             int chargingCount,

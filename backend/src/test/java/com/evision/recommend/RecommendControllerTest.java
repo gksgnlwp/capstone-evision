@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -54,6 +55,8 @@ class RecommendControllerTest {
     JdbcTemplate jdbc;
     @Autowired
     EntityManagerFactory emf;
+    @Autowired
+    Clock clock;
 
     long routeA;
 
@@ -114,8 +117,8 @@ class RecommendControllerTest {
                 .andExpect(jsonPath("$.recommendations[?(@.statId == 'ST000001')].maxOutputKw").value(100))
                 .andExpect(jsonPath("$.recommendations[?(@.statId == 'ST000004')].access.accessType").value("IC"))
                 .andExpect(jsonPath("$.recommendations[?(@.statId == 'ST000004')].detourKm").value(1.5));
-        // 후보, 상태 집계, 최대 출력, 점유율 이력 4회 (N+1 없음)
-        assertThat(stats.getPrepareStatementCount()).isEqualTo(4);
+        // 후보, 상태 집계, 최대 출력, 점유율 이력, AI 예측 5회 (N+1 없음)
+        assertThat(stats.getPrepareStatementCount()).isEqualTo(5);
     }
 
     @Test
@@ -146,6 +149,23 @@ class RecommendControllerTest {
         mvc.perform(base("routeId", "9999"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.recommendations.length()").value(0));
+    }
+
+    @Test
+    void 도착_구간의_신선한_AI_예측을_쓰고_오래된_예측은_무시한다() throws Exception {
+        // RA1 28.9km → 약 22분 뒤 도착. 지금 시각 기준으로 도착 구간을 계산해 넣는다
+        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime window = AvailabilityPredictor.floorToWindow(now.plusMinutes(22));
+        forecast("ST000001", window, "0.1234", "lgbm-v1", now.minusMinutes(10));
+        forecast("ST000004", AvailabilityPredictor.floorToWindow(now.plusMinutes(34)), "0.5000", "lgbm-v0",
+                now.minusHours(5));   // 오래된 예측
+
+        mvc.perform(base("direction", "상행"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.recommendations[?(@.statId == 'ST000001')].basis").value("AI_FORECAST"))
+                .andExpect(jsonPath("$.recommendations[?(@.statId == 'ST000001')].modelVersion").value("lgbm-v1"))
+                .andExpect(jsonPath("$.recommendations[?(@.statId == 'ST000001')].baselineProbability").value(0.123))
+                .andExpect(jsonPath("$.recommendations[?(@.statId == 'ST000004')].basis").value("PRIOR"));
     }
 
     @Test
@@ -209,6 +229,14 @@ class RecommendControllerTest {
                                      current_normalized_status, current_status_updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                 stationId, chgerId, type, outputKw, fast, deleted ? "Y" : "N", normalized, T);
+    }
+
+    private void forecast(String statId, LocalDateTime window, String p, String modelVersion,
+            LocalDateTime generatedAt) {
+        jdbc.update("""
+                INSERT INTO occupancy_forecast (station_id, target_window_start, p_available, model_version, generated_at)
+                SELECT station_id, ?, ?::numeric, ?, ? FROM station WHERE stat_id = ?""",
+                window, p, modelVersion, generatedAt, statId);
     }
 
     private void mapRestArea(long stationId, long restAreaId) {

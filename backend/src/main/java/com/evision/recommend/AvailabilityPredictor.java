@@ -10,7 +10,9 @@ import java.util.List;
  * 도착 시점 충전소 가용 확률 예측. DB와 무관한 순수 계산이다.
  *
  * <pre>
- * P(도착 시 가용) = α·P_now + (1-α)·P_hist,   α = exp(-도착까지 분 / realtimeTauMinutes)
+ * P(도착 시 가용) = α·P_now + (1-α)·P_base,   α = exp(-도착까지 분 / realtimeTauMinutes)
+ *
+ * P_base : AI 예측(occupancy_forecast)이 있으면 그 값, 없으면 P_hist (과거 통계)
  *
  * P_now  : 현재 급속충전기 상태. AVAILABLE 1기 이상 → 1, 관측 완전(UNKNOWN 0기) + AVAILABLE 0기 → 0, 그 외 NULL
  *          (OccupancyWindowCalculator.PointObservation.availability()와 같은 규칙). NULL이면 α = 0
@@ -22,6 +24,7 @@ import java.util.List;
  *          n = available이 NULL이 아닌 구간 수, s = 그중 true 수, k = priorStrength
  * </pre>
  * 이력이 없으면 P_hist = priorMean 이 되므로 수집 초기(콜드스타트)에도 값이 나온다.
+ * AI 예측을 쓸지(신선도 등)는 호출 쪽이 판단해 forecast 로 넘긴다. P_hist 는 비교용으로 항상 계산한다.
  * 조회 기간(최근 N주)은 호출 쪽이 정해서 samples 로 넘긴다.
  */
 public final class AvailabilityPredictor {
@@ -66,21 +69,27 @@ public final class AvailabilityPredictor {
     public record WindowSample(LocalDateTime windowStart, Boolean available) {
     }
 
-    /** 이력 근거 수준 (설명용). 표본이 있는 가장 구체적인 수준 */
+    /** AI 예측 한 건 (occupancy_forecast). probability 는 0~1 */
+    public record Forecast(double probability, String modelVersion) {
+    }
+
+    /** P_base 근거 (설명용). AI_FORECAST 가 아니면 과거 통계에서 표본이 있는 가장 구체적인 수준 */
     public enum Basis {
-        SAME_DAY_SLOT, SAME_DAY_TYPE_SLOT, SAME_SLOT, STATION_ALL, PRIOR
+        AI_FORECAST, SAME_DAY_SLOT, SAME_DAY_TYPE_SLOT, SAME_SLOT, STATION_ALL, PRIOR
     }
 
     /**
      * @param probability      최종 가용 확률 (0~1)
      * @param realtime         P_now (판단 불가면 null)
-     * @param historical       P_hist
+     * @param baseline         P_base (AI 예측 또는 과거 통계)
+     * @param statistical      P_hist (AI 예측이 있어도 비교용으로 계산)
      * @param realtimeWeight   α
-     * @param basis            P_hist 근거 수준
-     * @param basisSampleCount 근거 수준의 표본 구간 수
+     * @param basis            P_base 근거
+     * @param basisSampleCount 과거 통계 근거 수준의 표본 구간 수 (AI_FORECAST 면 P_hist 기준)
+     * @param modelVersion     AI 예측을 썼으면 그 모델 버전, 아니면 null
      */
-    public record Prediction(double probability, Double realtime, double historical, double realtimeWeight,
-            Basis basis, int basisSampleCount) {
+    public record Prediction(double probability, Double realtime, double baseline, double statistical,
+            double realtimeWeight, Basis basis, int basisSampleCount, String modelVersion) {
     }
 
     private final Settings settings;
@@ -96,16 +105,27 @@ public final class AvailabilityPredictor {
      * @param samples 이 충전소의 과거 30분 구간들
      */
     public Prediction predict(LocalDateTime now, LocalDateTime eta, CurrentStatus current, List<WindowSample> samples) {
+        return predict(now, eta, current, samples, null);
+    }
+
+    /**
+     * @param forecast 도착 구간의 AI 예측 (없거나 쓰지 않으면 null)
+     */
+    public Prediction predict(LocalDateTime now, LocalDateTime eta, CurrentStatus current, List<WindowSample> samples,
+            Forecast forecast) {
         LocalDateTime arrival = eta.isBefore(now) ? now : eta;
         double minutesAhead = Duration.between(now, arrival).toSeconds() / 60.0;
 
         Historical h = historical(arrival, samples);
+        double baseline = forecast == null ? h.probability : clamp(forecast.probability());
+        Basis basis = forecast == null ? h.basis : Basis.AI_FORECAST;
 
         Double realtime = current == null ? null : current.probability();
         double alpha = realtime == null ? 0.0 : Math.exp(-minutesAhead / settings.realtimeTauMinutes());
-        double p = realtime == null ? h.probability : alpha * realtime + (1 - alpha) * h.probability;
+        double p = realtime == null ? baseline : alpha * realtime + (1 - alpha) * baseline;
 
-        return new Prediction(clamp(p), realtime, h.probability, alpha, h.basis, h.basisCount);
+        return new Prediction(clamp(p), realtime, baseline, h.probability, alpha, basis, h.basisCount,
+                forecast == null ? null : forecast.modelVersion());
     }
 
     private record Historical(double probability, Basis basis, int basisCount) {
@@ -164,6 +184,11 @@ public final class AvailabilityPredictor {
     /** TODO(확인 필요): 공휴일·명절은 아직 평일로 본다 (공휴일 데이터 필요) */
     static boolean isWeekend(DayOfWeek d) {
         return d == DayOfWeek.SATURDAY || d == DayOfWeek.SUNDAY;
+    }
+
+    /** 시각이 속한 30분 구간의 시작 (occupancy_30m.window_start, occupancy_forecast.target_window_start) */
+    public static LocalDateTime floorToWindow(LocalDateTime t) {
+        return t.toLocalDate().atTime(floorToSlot(t.toLocalTime()));
     }
 
     static LocalTime floorToSlot(LocalTime t) {
