@@ -50,3 +50,26 @@ docker rm -f evision-perf
   SELECT sum(inserted_count) / count(DISTINCT started_at::date)
   FROM collection_run WHERE run_type = 'STATUS';        -- 하루 이력 증가량 ÷ 충전기 수 = changes_per_day
   ```
+
+## 추천 API (2026-10-06 추가)
+
+결과: [`docs/perf/2026-10-06-recommend/README.md`](../../../docs/perf/2026-10-06-recommend/README.md)
+
+| 파일 | 내용 |
+|---|---|
+| `generate_recommend_data.sql` | `generate_data.sql` 다음에 실행. `occupancy_30m`(기본 12주, 구간 순서로 적재)과 `occupancy_forecast`(6시간) 생성 |
+| `recommend_queries.sql` | 추천 API가 실행하는 쿼리 R1~R5와 개선한 과거 통계 집계 R4b |
+| `run_recommend_perf.sh <label>` | 위 쿼리 EXPLAIN과 추천 API 응답시간(RUNS회)을 `docs/perf/<날짜>-recommend/`에 기록 |
+
+```bash
+# 위 절차 1~2 다음에 (history_days는 1이면 충분하다. 추천은 상태 이력을 읽지 않는다)
+docker exec -i evision-perf psql -U perf -d evision < scripts/perf/generate_recommend_data.sql
+
+# 앱 실행: V1~V3를 psql로 적용했다면 baseline-version=3 (V4 이후는 Flyway가 적용)
+DB_URL=jdbc:postgresql://localhost:55432/evision DB_USERNAME=perf DB_PASSWORD=perf \
+  java -jar build/libs/backend-0.0.1-SNAPSHOT.jar --server.port=18080 --evision.collection.enabled=false \
+  --spring.docker.compose.enabled=false --spring.flyway.baseline-on-migrate=true --spring.flyway.baseline-version=3
+
+RUNS=100 bash scripts/perf/run_recommend_perf.sh after
+```
+

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.within;
 
+import java.time.DayOfWeek;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
@@ -14,6 +15,8 @@ import org.junit.jupiter.api.Test;
 import com.evision.recommend.AvailabilityPredictor.Basis;
 import com.evision.recommend.AvailabilityPredictor.CurrentStatus;
 import com.evision.recommend.AvailabilityPredictor.Forecast;
+import com.evision.recommend.AvailabilityPredictor.HistoryStats;
+import com.evision.recommend.AvailabilityPredictor.SlotCount;
 import com.evision.recommend.AvailabilityPredictor.Prediction;
 import com.evision.recommend.AvailabilityPredictor.Settings;
 import com.evision.recommend.AvailabilityPredictor.WindowSample;
@@ -177,6 +180,30 @@ class AvailabilityPredictorTest {
     @Test
     void AI_예측이_없으면_모델_버전은_NULL() {
         assertThat(predictor.predict(NOW, ETA_MON, null, List.of()).modelVersion()).isNull();
+    }
+
+    @Test
+    void DB에서_미리_센_값과_구간_목록으로_센_값이_같다() {
+        List<WindowSample> samples = List.of(
+                sample(2026, 9, 28, 14, 0, false),   // 월 같은 슬롯
+                sample(2026, 9, 21, 14, 0, true),    // 월 같은 슬롯
+                sample(2026, 9, 29, 14, 0, true),    // 화 같은 슬롯
+                sample(2026, 9, 26, 14, 0, false),   // 토 같은 슬롯
+                sample(2026, 9, 28, 9, 30, true),    // 월 다른 슬롯
+                new WindowSample(LocalDateTime.of(2026, 9, 28, 14, 0).minusWeeks(2), null));   // 제외
+        List<SlotCount> aggregates = List.of(
+                new SlotCount(DayOfWeek.MONDAY, true, 2, 1),
+                new SlotCount(DayOfWeek.TUESDAY, true, 1, 1),
+                new SlotCount(DayOfWeek.SATURDAY, true, 1, 0),
+                new SlotCount(DayOfWeek.MONDAY, false, 1, 1));
+
+        HistoryStats fromSamples = HistoryStats.from(ETA_MON, samples);
+
+        assertThat(HistoryStats.fromAggregates(ETA_MON, aggregates)).isEqualTo(fromSamples);
+        assertThat(fromSamples.all().n()).isEqualTo(5);
+        assertThat(fromSamples.sameSlot().n()).isEqualTo(4);
+        assertThat(fromSamples.sameDayType().n()).isEqualTo(3);   // 토요일 제외
+        assertThat(fromSamples.sameDay().n()).isEqualTo(2);
     }
 
     @Test

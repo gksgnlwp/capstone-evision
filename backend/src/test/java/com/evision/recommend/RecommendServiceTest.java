@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -21,7 +22,8 @@ import com.evision.common.code.NormalizedStatus;
 import com.evision.common.time.TimeConfig;
 import com.evision.recommend.AvailabilityPredictor.Basis;
 import com.evision.recommend.RecommendRepository.ForecastRow;
-import com.evision.recommend.RecommendRepository.OccupancyRow;
+import com.evision.recommend.AvailabilityPredictor.SlotCount;
+import com.evision.recommend.RecommendRepository.HistoryRow;
 import com.evision.recommend.RecommendRepository.OutputRow;
 import com.evision.reference.domain.Interchange;
 import com.evision.reference.domain.RestArea;
@@ -76,7 +78,7 @@ class RecommendServiceTest {
                 new StatusCountRow(3L, NormalizedStatus.AVAILABLE, 2L, NOW)));
         when(repository.maxFastOutput(anyCollection())).thenReturn(List.of(
                 new OutputRow(1L, 100), new OutputRow(3L, 200)));
-        when(repository.findOccupancy(anyCollection(), any())).thenReturn(List.of());
+        when(repository.countHistory(any(), any())).thenReturn(List.of());
         when(repository.findForecasts(anyCollection(), any(), any(), any())).thenReturn(List.of());
     }
 
@@ -126,11 +128,9 @@ class RecommendServiceTest {
 
     @Test
     void 과거_같은_시간대_만차_이력이_있으면_확률이_내려간다() {
-        LocalDateTime lastMonday = LocalDateTime.of(2026, 9, 28, 13, 30);   // S3 도착 13:56 → 13:30 슬롯
-        when(repository.findOccupancy(anyCollection(), any())).thenReturn(List.of(
-                new OccupancyRow(3L, lastMonday, false),
-                new OccupancyRow(3L, lastMonday.minusWeeks(1), false),
-                new OccupancyRow(3L, lastMonday.minusWeeks(2), false)));
+        // S3 도착 월 13:56 → 13:30 슬롯. 지난 월요일 같은 슬롯 3번 모두 만차
+        when(repository.countHistory(any(), eq(NOW.minusWeeks(4)))).thenReturn(List.of(
+                new HistoryRow(3L, new SlotCount(DayOfWeek.MONDAY, true, 3, 0))));
 
         RecommendResponse.Item s3 = service.recommend(condition(100, 37.0)).recommendations().stream()
                 .filter(i -> i.statId().equals("ST000003")).findFirst().orElseThrow();

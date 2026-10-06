@@ -24,6 +24,7 @@ import java.util.List;
  *          n = available이 NULL이 아닌 구간 수, s = 그중 true 수, k = priorStrength
  * </pre>
  * 이력이 없으면 P_hist = priorMean 이 되므로 수집 초기(콜드스타트)에도 값이 나온다.
+ * 수준별 (n, s) 는 HistoryStats 로 받는다. 서비스는 DB에서 미리 센 값(fromAggregates)을, 테스트는 구간 목록(from)을 쓴다.
  * AI 예측을 쓸지(신선도 등)는 호출 쪽이 판단해 forecast 로 넘긴다. P_hist 는 비교용으로 항상 계산한다.
  * 조회 기간(최근 N주)은 호출 쪽이 정해서 samples 로 넘긴다.
  */
@@ -73,6 +74,65 @@ public final class AvailabilityPredictor {
     public record Forecast(double probability, String modelVersion) {
     }
 
+    /** 수준별 표본 수 n 과 그중 가용(true) 수 hits */
+    public record Count(int n, int hits) {
+
+        public static final Count EMPTY = new Count(0, 0);
+
+        Count plus(int n, int hits) {
+            return new Count(this.n + n, this.hits + hits);
+        }
+
+        double smooth(double prior, double strength) {
+            return (hits + strength * prior) / (n + strength);
+        }
+    }
+
+    /** 도착 시각 기준 수준별 표본. 위 수준은 아래 수준을 포함한다 (all ⊇ sameSlot ⊇ sameDayType ⊇ sameDay) */
+    public record HistoryStats(Count all, Count sameSlot, Count sameDayType, Count sameDay) {
+
+        public static final HistoryStats EMPTY = new HistoryStats(Count.EMPTY, Count.EMPTY, Count.EMPTY, Count.EMPTY);
+
+        /** 30분 구간 목록에서 센다. available 이 NULL 인 구간은 뺀다 */
+        public static HistoryStats from(LocalDateTime arrival, List<WindowSample> samples) {
+            LocalTime slot = floorToSlot(arrival.toLocalTime());
+            HistoryStats stats = EMPTY;
+            for (WindowSample s : samples) {
+                if (s.available() == null) {
+                    continue;
+                }
+                stats = stats.add(arrival, s.windowStart().getDayOfWeek(),
+                        floorToSlot(s.windowStart().toLocalTime()).equals(slot), 1, s.available() ? 1 : 0);
+            }
+            return stats;
+        }
+
+        /** DB에서 (요일, 도착 슬롯과 같은지) 단위로 미리 센 값에서 만든다 */
+        public static HistoryStats fromAggregates(LocalDateTime arrival, List<SlotCount> counts) {
+            HistoryStats stats = EMPTY;
+            for (SlotCount c : counts) {
+                stats = stats.add(arrival, c.dayOfWeek(), c.sameSlot(), c.n(), c.hits());
+            }
+            return stats;
+        }
+
+        private HistoryStats add(LocalDateTime arrival, DayOfWeek day, boolean sameSlot, int n, int hits) {
+            Count a = all.plus(n, hits);
+            if (!sameSlot) {
+                return new HistoryStats(a, this.sameSlot, sameDayType, sameDay);
+            }
+            DayOfWeek arrivalDay = arrival.getDayOfWeek();
+            boolean dayType = isWeekend(day) == isWeekend(arrivalDay);
+            return new HistoryStats(a, this.sameSlot.plus(n, hits),
+                    dayType ? sameDayType.plus(n, hits) : sameDayType,
+                    day == arrivalDay ? sameDay.plus(n, hits) : sameDay);
+        }
+    }
+
+    /** 미리 센 값 한 줄: 요일, 도착 슬롯과 같은 시간대인지, 표본 수, 가용 수 */
+    public record SlotCount(DayOfWeek dayOfWeek, boolean sameSlot, int n, int hits) {
+    }
+
     /** P_base 근거 (설명용). AI_FORECAST 가 아니면 과거 통계에서 표본이 있는 가장 구체적인 수준 */
     public enum Basis {
         AI_FORECAST, SAME_DAY_SLOT, SAME_DAY_TYPE_SLOT, SAME_SLOT, STATION_ALL, PRIOR
@@ -114,9 +174,19 @@ public final class AvailabilityPredictor {
     public Prediction predict(LocalDateTime now, LocalDateTime eta, CurrentStatus current, List<WindowSample> samples,
             Forecast forecast) {
         LocalDateTime arrival = eta.isBefore(now) ? now : eta;
+        return predict(now, eta, current, HistoryStats.from(arrival, samples), forecast);
+    }
+
+    /**
+     * @param stats    도착 시각 기준 수준별 과거 표본 (HistoryStats.from / fromAggregates)
+     * @param forecast 도착 구간의 AI 예측 (없거나 쓰지 않으면 null)
+     */
+    public Prediction predict(LocalDateTime now, LocalDateTime eta, CurrentStatus current, HistoryStats stats,
+            Forecast forecast) {
+        LocalDateTime arrival = eta.isBefore(now) ? now : eta;
         double minutesAhead = Duration.between(now, arrival).toSeconds() / 60.0;
 
-        Historical h = historical(arrival, samples);
+        Historical h = historical(stats);
         double baseline = forecast == null ? h.probability : clamp(forecast.probability());
         Basis basis = forecast == null ? h.basis : Basis.AI_FORECAST;
 
@@ -131,52 +201,24 @@ public final class AvailabilityPredictor {
     private record Historical(double probability, Basis basis, int basisCount) {
     }
 
-    private Historical historical(LocalDateTime arrival, List<WindowSample> samples) {
-        LocalTime slot = floorToSlot(arrival.toLocalTime());
-        DayOfWeek day = arrival.getDayOfWeek();
-        boolean weekend = isWeekend(day);
-
-        Counter all = new Counter();
-        Counter sameSlot = new Counter();
-        Counter sameDayType = new Counter();
-        Counter sameDay = new Counter();
-        for (WindowSample s : samples) {
-            if (s.available() == null) {
-                continue;
-            }
-            boolean hit = s.available();
-            all.add(hit);
-            if (!floorToSlot(s.windowStart().toLocalTime()).equals(slot)) {
-                continue;
-            }
-            sameSlot.add(hit);
-            DayOfWeek d = s.windowStart().getDayOfWeek();
-            if (isWeekend(d) != weekend) {
-                continue;
-            }
-            sameDayType.add(hit);
-            if (d == day) {
-                sameDay.add(hit);
-            }
-        }
-
+    private Historical historical(HistoryStats stats) {
         double k = settings.priorStrength();
-        double p4 = all.smooth(settings.priorMean(), k);
-        double p3 = sameSlot.smooth(p4, k);
-        double p2 = sameDayType.smooth(p3, k);
-        double p1 = sameDay.smooth(p2, k);
+        double p4 = stats.all().smooth(settings.priorMean(), k);
+        double p3 = stats.sameSlot().smooth(p4, k);
+        double p2 = stats.sameDayType().smooth(p3, k);
+        double p1 = stats.sameDay().smooth(p2, k);
 
-        if (sameDay.n > 0) {
-            return new Historical(p1, Basis.SAME_DAY_SLOT, sameDay.n);
+        if (stats.sameDay().n() > 0) {
+            return new Historical(p1, Basis.SAME_DAY_SLOT, stats.sameDay().n());
         }
-        if (sameDayType.n > 0) {
-            return new Historical(p1, Basis.SAME_DAY_TYPE_SLOT, sameDayType.n);
+        if (stats.sameDayType().n() > 0) {
+            return new Historical(p1, Basis.SAME_DAY_TYPE_SLOT, stats.sameDayType().n());
         }
-        if (sameSlot.n > 0) {
-            return new Historical(p1, Basis.SAME_SLOT, sameSlot.n);
+        if (stats.sameSlot().n() > 0) {
+            return new Historical(p1, Basis.SAME_SLOT, stats.sameSlot().n());
         }
-        if (all.n > 0) {
-            return new Historical(p1, Basis.STATION_ALL, all.n);
+        if (stats.all().n() > 0) {
+            return new Historical(p1, Basis.STATION_ALL, stats.all().n());
         }
         return new Historical(p1, Basis.PRIOR, 0);
     }
@@ -199,21 +241,5 @@ public final class AvailabilityPredictor {
 
     private static double clamp(double p) {
         return Math.max(0.0, Math.min(1.0, p));
-    }
-
-    private static final class Counter {
-        int n;
-        int hits;
-
-        void add(boolean hit) {
-            n++;
-            if (hit) {
-                hits++;
-            }
-        }
-
-        double smooth(double prior, double strength) {
-            return (hits + strength * prior) / (n + strength);
-        }
     }
 }

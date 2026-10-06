@@ -1,6 +1,5 @@
 package com.evision.recommend;
 
-import static com.evision.aggregation.domain.QOccupancy30m.occupancy30m;
 import static com.evision.forecast.domain.QOccupancyForecast.occupancyForecast;
 import static com.evision.reference.domain.QInterchange.interchange;
 import static com.evision.reference.domain.QRestArea.restArea;
@@ -9,12 +8,18 @@ import static com.evision.station.domain.QStation.station;
 import static com.evision.station.domain.QStationAccess.stationAccess;
 
 import java.math.BigDecimal;
+import java.sql.Timestamp;
+import java.time.DayOfWeek;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
+import com.evision.recommend.AvailabilityPredictor.SlotCount;
 import com.evision.reference.domain.QRoute;
 import com.evision.station.domain.AccessType;
 import com.evision.station.domain.StationAccess;
@@ -24,7 +29,8 @@ import com.querydsl.jpa.JPAExpressions;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 
 /**
- * 추천용 Querydsl 쿼리. 조건 메서드는 값이 없으면 null을 반환해 조건을 생략한다.
+ * 추천용 쿼리. 조회는 Querydsl, 과거 통계 집계는 SQL(JdbcTemplate)이다.
+ * Querydsl 조건 메서드는 값이 없으면 null을 반환해 조건을 생략한다.
  */
 @Repository
 public class RecommendRepository {
@@ -35,10 +41,32 @@ public class RecommendRepository {
     private static final QRoute restAreaRoute = new QRoute("restAreaRoute");
     private static final QRoute icRoute = new QRoute("icRoute");
 
-    private final JPAQueryFactory query;
+    /**
+     * 충전소별 도착 슬롯을 기준으로 과거 구간을 (요일, 도착 슬롯과 같은지) 단위로 센다.
+     * 커버링 인덱스 (station_id, window_start) INCLUDE (available) 로 Index Only Scan 한다 (V4).
+     * 결과는 충전소당 최대 14행 (요일 7 × 슬롯 일치 여부 2).
+     */
+    static final String HISTORY_COUNTS = """
+            WITH target AS (
+              SELECT * FROM unnest(CAST(? AS bigint[]), CAST(? AS text[])) AS t(station_id, slot)
+            )
+            SELECT o.station_id,
+                   CAST(extract(isodow FROM o.window_start) AS int)          AS dow,
+                   CAST(o.window_start AS time) = CAST(t.slot AS time)       AS same_slot,
+                   count(o.available)                                        AS n,
+                   count(*) FILTER (WHERE o.available)                       AS hits
+            FROM target t
+            JOIN occupancy_30m o ON o.station_id = t.station_id
+            WHERE o.window_start >= ?
+            GROUP BY o.station_id, dow, same_slot
+            """;
 
-    public RecommendRepository(JPAQueryFactory query) {
+    private final JPAQueryFactory query;
+    private final JdbcTemplate jdbc;
+
+    public RecommendRepository(JPAQueryFactory query, JdbcTemplate jdbc) {
         this.query = query;
+        this.jdbc = jdbc;
     }
 
     /**
@@ -76,16 +104,29 @@ public class RecommendRepository {
                 .fetch();
     }
 
-    public record OccupancyRow(Long stationId, LocalDateTime windowStart, Boolean available) {
+    public record HistoryRow(long stationId, SlotCount count) {
     }
 
-    /** [from, ∞) 구간의 30분 점유율. UNIQUE (station_id, window_start) 인덱스를 탄다. */
-    public List<OccupancyRow> findOccupancy(Collection<Long> stationIds, LocalDateTime from) {
-        return query.select(Projections.constructor(OccupancyRow.class,
-                        occupancy30m.station.id, occupancy30m.windowStart, occupancy30m.available))
-                .from(occupancy30m)
-                .where(occupancy30m.station.id.in(stationIds), occupancy30m.windowStart.goe(from))
-                .fetch();
+    /**
+     * [from, ∞) 구간의 과거 가용 통계를 미리 센다.
+     *
+     * @param slotByStation 충전소별 도착 슬롯 (30분 단위 시각)
+     */
+    public List<HistoryRow> countHistory(Map<Long, LocalTime> slotByStation, LocalDateTime from) {
+        Long[] ids = slotByStation.keySet().toArray(Long[]::new);
+        String[] slots = new String[ids.length];
+        for (int i = 0; i < ids.length; i++) {
+            slots[i] = slotByStation.get(ids[i]).toString();
+        }
+        return jdbc.query(con -> {
+            var ps = con.prepareStatement(HISTORY_COUNTS);
+            ps.setArray(1, con.createArrayOf("bigint", ids));
+            ps.setArray(2, con.createArrayOf("text", slots));
+            ps.setTimestamp(3, Timestamp.valueOf(from));
+            return ps;
+        }, (rs, i) -> new HistoryRow(rs.getLong("station_id"),
+                new SlotCount(DayOfWeek.of(rs.getInt("dow")), rs.getBoolean("same_slot"), rs.getInt("n"),
+                        rs.getInt("hits"))));
     }
 
     public record ForecastRow(Long stationId, LocalDateTime targetWindowStart, BigDecimal pAvailable,

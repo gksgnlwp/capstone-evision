@@ -117,8 +117,8 @@ class RecommendControllerTest {
                 .andExpect(jsonPath("$.recommendations[?(@.statId == 'ST000001')].maxOutputKw").value(100))
                 .andExpect(jsonPath("$.recommendations[?(@.statId == 'ST000004')].access.accessType").value("IC"))
                 .andExpect(jsonPath("$.recommendations[?(@.statId == 'ST000004')].detourKm").value(1.5));
-        // 후보, 상태 집계, 최대 출력, 점유율 이력, AI 예측 5회 (N+1 없음)
-        assertThat(stats.getPrepareStatementCount()).isEqualTo(5);
+        // Hibernate: 후보, 상태 집계, 최대 출력, AI 예측 4회 (N+1 없음). 과거 통계 집계 1회는 JdbcTemplate이라 여기서 세지 않는다
+        assertThat(stats.getPrepareStatementCount()).isEqualTo(4);
     }
 
     @Test
@@ -166,6 +166,26 @@ class RecommendControllerTest {
                 .andExpect(jsonPath("$.recommendations[?(@.statId == 'ST000001')].modelVersion").value("lgbm-v1"))
                 .andExpect(jsonPath("$.recommendations[?(@.statId == 'ST000001')].baselineProbability").value(0.123))
                 .andExpect(jsonPath("$.recommendations[?(@.statId == 'ST000004')].basis").value("PRIOR"));
+    }
+
+    @Test
+    void 과거_통계는_DB에서_도착_요일과_슬롯으로_센다() throws Exception {
+        // RA1(S1) 약 22분 뒤 도착. 같은 요일·슬롯 3주 모두 만차, 다른 슬롯 2건 가용, 5주 전(조회 기간 밖) 1건
+        LocalDateTime window = AvailabilityPredictor.floorToWindow(LocalDateTime.now(clock).plusMinutes(22));
+        occupancy("ST000001", window.minusWeeks(1), false);
+        occupancy("ST000001", window.minusWeeks(2), false);
+        occupancy("ST000001", window.minusWeeks(3), false);
+        occupancy("ST000001", window.minusWeeks(1).minusHours(3), true);
+        occupancy("ST000001", window.minusWeeks(2).minusHours(5), true);
+        occupancy("ST000001", window.minusWeeks(5), true);
+
+        mvc.perform(base("direction", "상행"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.recommendations[?(@.statId == 'ST000001')].basis").value("SAME_DAY_SLOT"))
+                .andExpect(jsonPath("$.recommendations[?(@.statId == 'ST000001')].basisSampleCount").value(3))
+                // 전체 5건 중 2건 가용: p4 = (2+4·0.7)/9 = 0.533, 같은 슬롯·요일유형·요일 각 3건 모두 만차:
+                // p3 = 4·p4/7 = 0.305, p2 = 4·p3/7 = 0.174, p1 = 4·p2/7 = 0.0995
+                .andExpect(jsonPath("$.recommendations[?(@.statId == 'ST000001')].statisticalProbability").value(0.1));
     }
 
     @Test
@@ -237,6 +257,14 @@ class RecommendControllerTest {
                 INSERT INTO occupancy_forecast (station_id, target_window_start, p_available, model_version, generated_at)
                 SELECT station_id, ?, ?::numeric, ?, ? FROM station WHERE stat_id = ?""",
                 window, p, modelVersion, generatedAt, statId);
+    }
+
+    private void occupancy(String statId, LocalDateTime window, boolean available) {
+        jdbc.update("""
+                INSERT INTO occupancy_30m (station_id, window_start, fast_charger_count, available,
+                                           full_minutes, valid_minutes, observed_points, computed_at)
+                SELECT station_id, ?, 2, ?, 0, 30, 6, now() FROM station WHERE stat_id = ?""",
+                window, available, statId);
     }
 
     private void mapRestArea(long stationId, long restAreaId) {

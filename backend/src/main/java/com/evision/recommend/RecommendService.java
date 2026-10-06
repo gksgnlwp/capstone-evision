@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -17,10 +18,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.evision.recommend.AvailabilityPredictor.CurrentStatus;
 import com.evision.recommend.AvailabilityPredictor.Forecast;
+import com.evision.recommend.AvailabilityPredictor.HistoryStats;
+import com.evision.recommend.AvailabilityPredictor.SlotCount;
 import com.evision.recommend.AvailabilityPredictor.Prediction;
-import com.evision.recommend.AvailabilityPredictor.WindowSample;
 import com.evision.recommend.RecommendRepository.ForecastRow;
-import com.evision.recommend.RecommendRepository.OccupancyRow;
+import com.evision.recommend.RecommendRepository.HistoryRow;
 import com.evision.recommend.RecommendRepository.OutputRow;
 import com.evision.recommend.RecommendScorer.Candidate;
 import com.evision.recommend.RecommendScorer.Result;
@@ -39,7 +41,8 @@ import com.evision.station.query.StationQueryRepository.StatusCountRow;
  * <p>노선 이정 데이터가 없어서 거리는 직선거리 × roadDistanceFactor 로 근사한다.
  * 한 충전소가 여러 접근지점에 매핑돼 있으면 (거리 + 우회) 가 가장 짧은 접근지점 하나로 본다.
  * 도착 구간의 AI 예측(occupancy_forecast)이 있고 forecastMaxAge 안에 만든 것이면 과거 통계 대신 쓴다.
- * 쿼리 수는 후보 건수와 관계없이 5회 (후보, 상태 집계, 최대 출력, 점유율 이력, AI 예측).
+ * 쿼리 수는 후보 건수와 관계없이 5회 (후보, 상태 집계, 최대 출력, 과거 통계 집계, AI 예측).
+ * 과거 통계는 구간 행을 가져오지 않고 DB에서 (요일, 도착 슬롯 일치) 단위로 센 값만 받는다.
  */
 @Service
 @Transactional(readOnly = true)
@@ -78,16 +81,17 @@ public class RecommendService {
         for (OutputRow r : repository.maxFastOutput(ids)) {
             outputs.put(r.stationId(), r.maxOutputKw());
         }
-        Map<Long, List<WindowSample>> samples = repository
-                .findOccupancy(ids, now.minusWeeks(properties.historyWeeks())).stream()
-                .collect(Collectors.groupingBy(OccupancyRow::stationId,
-                        Collectors.mapping(r -> new WindowSample(r.windowStart(), r.available()), Collectors.toList())));
-
         Map<Long, LocalDateTime> etaWindows = new HashMap<>();
+        Map<Long, LocalTime> etaSlots = new HashMap<>();
         for (Located l : nearest.values()) {
-            etaWindows.put(l.station().getId(),
-                    AvailabilityPredictor.floorToWindow(now.plusMinutes(etaMinutes(l.travelKm()))));
+            LocalDateTime window = AvailabilityPredictor.floorToWindow(now.plusMinutes(etaMinutes(l.travelKm())));
+            etaWindows.put(l.station().getId(), window);
+            etaSlots.put(l.station().getId(), window.toLocalTime());
         }
+        Map<Long, List<SlotCount>> history = repository
+                .countHistory(etaSlots, now.minusWeeks(properties.historyWeeks())).stream()
+                .collect(Collectors.groupingBy(HistoryRow::stationId,
+                        Collectors.mapping(HistoryRow::count, Collectors.toList())));
         Map<String, Forecast> forecasts = forecasts(ids, etaWindows, now);
 
         Map<Long, Prediction> predictions = new HashMap<>();
@@ -95,8 +99,10 @@ public class RecommendService {
         for (Located l : nearest.values()) {
             long id = l.station().getId();
             CurrentStatus status = statuses.getOrDefault(id, new CurrentStatus(0, 0, 0, 0));
-            Prediction p = predictor.predict(now, now.plusMinutes(etaMinutes(l.travelKm())), status,
-                    samples.getOrDefault(id, List.of()), forecasts.get(forecastKey(id, etaWindows.get(id))));
+            LocalDateTime eta = now.plusMinutes(etaMinutes(l.travelKm()));
+            Prediction p = predictor.predict(now, eta, status,
+                    HistoryStats.fromAggregates(eta, history.getOrDefault(id, List.of())),
+                    forecasts.get(forecastKey(id, etaWindows.get(id))));
             predictions.put(id, p);
             candidates.add(new Candidate(id, l.distanceKm(), l.detourKm(), p.probability(), outputs.get(id),
                     fastCount(status)));
