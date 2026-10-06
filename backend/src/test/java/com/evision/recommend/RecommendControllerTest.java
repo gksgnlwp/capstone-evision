@@ -7,6 +7,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 import org.hibernate.SessionFactory;
 import org.hibernate.stat.Statistics;
@@ -118,14 +120,14 @@ class RecommendControllerTest {
 
     @Test
     void 방향을_주면_그_방향과_양방향_휴게소_그리고_IC만_본다() throws Exception {
-        mvc.perform(base().param("direction", "상행"))
+        mvc.perform(base("direction", "상행"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.candidateCount").value(3));   // RA2(하행) 제외
     }
 
     @Test
     void 충전기_타입으로_좁힌다() throws Exception {
-        mvc.perform(base().param("chargerType", "07"))
+        mvc.perform(base("chargerType", "07"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.recommendations[*].statId", contains("ST000003")));
     }
@@ -133,7 +135,7 @@ class RecommendControllerTest {
     @Test
     void 도달_거리_밖은_제외한다() throws Exception {
         // 도달 가능 40km: RA1(36.20)만 28.9km. RA2 36.1km, IC1 43.4+1.5km, RA3 57.8km
-        mvc.perform(base().param("remainingRangeKm", "50").param("direction", "상행"))
+        mvc.perform(base("remainingRangeKm", "50", "direction", "상행"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.recommendations[*].statId", contains("ST000001")))
                 .andExpect(jsonPath("$.unreachableCount").value(2));
@@ -141,14 +143,14 @@ class RecommendControllerTest {
 
     @Test
     void 후보가_없으면_빈_목록으로_200() throws Exception {
-        mvc.perform(base().param("routeId", "9999"))
+        mvc.perform(base("routeId", "9999"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.recommendations.length()").value(0));
     }
 
     @Test
     void 조건_오류는_INVALID_QUERY() throws Exception {
-        mvc.perform(base().param("remainingRangeKm", "0"))
+        mvc.perform(base("remainingRangeKm", "0"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_QUERY"));
         mvc.perform(get("/api/recommendations").param("lat", "36").param("lng", "127").param("routeId", "1"))
@@ -156,11 +158,19 @@ class RecommendControllerTest {
                 .andExpect(jsonPath("$.code").value("INVALID_QUERY"));
     }
 
-    private MockHttpServletRequestBuilder base() {
-        return get("/api/recommendations")
-                .param("lat", "36.0").param("lng", "127.0")
-                .param("routeId", String.valueOf(routeA))
-                .param("remainingRangeKm", "200");
+    /** 기본 조건 (36.0, 127.0, 노선 A, 남은 200km). overrides는 이름, 값 순서로 기본값을 바꾸거나 더한다. */
+    private MockHttpServletRequestBuilder base(String... overrides) {
+        Map<String, String> params = new LinkedHashMap<>();
+        params.put("lat", "36.0");
+        params.put("lng", "127.0");
+        params.put("routeId", String.valueOf(routeA));
+        params.put("remainingRangeKm", "200");
+        for (int i = 0; i < overrides.length; i += 2) {
+            params.put(overrides[i], overrides[i + 1]);
+        }
+        MockHttpServletRequestBuilder request = get("/api/recommendations");
+        params.forEach(request::param);
+        return request;
     }
 
     private Statistics statistics() {
