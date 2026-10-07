@@ -137,6 +137,30 @@ class StationQueryControllerTest {
     }
 
     @Test
+    void 방향을_지정해도_같은_노선의_IC_충전소는_남는다() throws Exception {
+        // 노선 A에 IC2를 추가하고, 영역 밖의 S6을 IC2에만 매핑한다
+        long ic2 = id("""
+                INSERT INTO interchange (route_id, facility_code, name, facility_type, latitude, longitude)
+                VALUES (?, '0010I00001', '북천안IC', 'IC', 36.9, 127.1) RETURNING ic_id""", routeA);
+        long s6 = station("ST000006", 37.60, 127.10, false);
+        mapIc(s6, ic2);
+
+        // 노선 A + 상행: 상행 휴게소(S1)와 노선 A의 IC(S6). S2는 하행 휴게소와 노선 B IC라 빠진다
+        mvc.perform(get("/api/stations").param("routeId", String.valueOf(routeA)).param("direction", "상행"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.stations[*].statId", contains("ST000001", "ST000006")))
+                .andExpect(jsonPath("$.stations[1].accesses.length()").value(1))
+                .andExpect(jsonPath("$.stations[1].accesses[0].accessType").value("IC"))
+                .andExpect(jsonPath("$.stations[1].accesses[0].icName").value("북천안IC"));
+
+        // IC를 빼려면 접근유형을 휴게소로 지정한다
+        mvc.perform(get("/api/stations").param("routeId", String.valueOf(routeA)).param("direction", "상행")
+                        .param("accessType", "REST_AREA"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.stations[*].statId", contains("ST000001")));
+    }
+
+    @Test
     void 접근유형과_충전기_타입으로_좁힌다() throws Exception {
         mvc.perform(area(get("/api/stations")).param("accessType", "IC"))
                 .andExpect(jsonPath("$.stations[*].statId", contains("ST000002")));
