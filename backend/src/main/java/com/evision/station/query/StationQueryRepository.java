@@ -137,9 +137,15 @@ public class StationQueryRepository {
         return restArea.route.id.eq(routeId).or(interchange.route.id.eq(routeId));
     }
 
-    /** 방향은 휴게소에만 있으므로, 지정하면 IC 접근지점은 제외된다. */
+    /**
+     * 방향은 휴게소에만 있다. IC는 방향 구분이 없으므로 방향을 지정해도 같은 노선의 IC 접근지점은 남긴다 (FR-08).
+     * IC를 빼려면 accessType=REST_AREA로 지정한다.
+     */
     private BooleanExpression directionEq(String direction) {
-        return direction == null ? null : restArea.direction.eq(direction);
+        if (direction == null) {
+            return null;
+        }
+        return restArea.direction.eq(direction).or(stationAccess.accessType.eq(AccessType.IC));
     }
 
     private BooleanExpression accessTypeEq(AccessType accessType) {
