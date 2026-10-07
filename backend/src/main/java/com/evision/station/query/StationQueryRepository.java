@@ -74,6 +74,39 @@ public class StationQueryRepository {
                 .fetch();
     }
 
+    public record RouteDirectionRow(Long routeId, String routeNo, String routeName, String direction, Long stations) {
+    }
+
+    public record RouteIcRow(Long routeId, String routeNo, String routeName, Long stations) {
+    }
+
+    /** FR-06 노선·방향별 휴게소 매핑 충전소 수 (삭제된 충전소 제외) */
+    public List<RouteDirectionRow> countRestAreaStationsByRoute() {
+        return query.select(Projections.constructor(RouteDirectionRow.class,
+                        restAreaRoute.id, restAreaRoute.routeNo, restAreaRoute.routeName, restArea.direction,
+                        stationAccess.station.id.countDistinct()))
+                .from(stationAccess)
+                .join(stationAccess.restArea, restArea)
+                .join(restArea.route, restAreaRoute)
+                .join(stationAccess.station, station)
+                .where(station.deleted.isFalse())
+                .groupBy(restAreaRoute.id, restAreaRoute.routeNo, restAreaRoute.routeName, restArea.direction)
+                .fetch();
+    }
+
+    /** FR-06 노선별 IC 매핑 충전소 수 (삭제된 충전소 제외) */
+    public List<RouteIcRow> countIcStationsByRoute() {
+        return query.select(Projections.constructor(RouteIcRow.class,
+                        icRoute.id, icRoute.routeNo, icRoute.routeName, stationAccess.station.id.countDistinct()))
+                .from(stationAccess)
+                .join(stationAccess.interchange, interchange)
+                .join(interchange.route, icRoute)
+                .join(stationAccess.station, station)
+                .where(station.deleted.isFalse())
+                .groupBy(icRoute.id, icRoute.routeNo, icRoute.routeName)
+                .fetch();
+    }
+
     public record StatusCountRow(Long stationId, NormalizedStatus status, Long count, LocalDateTime latestUpdatedAt) {
     }
 
