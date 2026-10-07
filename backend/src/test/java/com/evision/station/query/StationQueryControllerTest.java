@@ -93,6 +93,26 @@ class StationQueryControllerTest {
         mapIc(s5, ic1);
     }
 
+    // ---- 노선 목록 (FR-06) ----
+
+    @Test
+    void 충전소가_매핑된_노선만_노선번호_순으로_방향과_함께_나온다() throws Exception {
+        // 노선 A(10): 상행 휴게소 S1(삭제된 S4 제외), 하행 휴게소 S2 / 노선 B(500): IC1에 S2·S5
+        jdbc.update("INSERT INTO route (route_no, route_name) VALUES ('35', '중부선')");   // 매핑 없는 노선은 빠진다
+        Statistics stats = statistics();
+        mvc.perform(get("/api/routes"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.routes[*].routeNo", contains("10", "500")))
+                .andExpect(jsonPath("$.routes[0].routeName").value("경부선"))
+                .andExpect(jsonPath("$.routes[0].directions", contains("상행", "하행")))
+                .andExpect(jsonPath("$.routes[0].restAreaStations").value(2))
+                .andExpect(jsonPath("$.routes[0].icStations").value(0))
+                .andExpect(jsonPath("$.routes[1].directions.length()").value(0))
+                .andExpect(jsonPath("$.routes[1].restAreaStations").value(0))
+                .andExpect(jsonPath("$.routes[1].icStations").value(2));
+        assertThat(stats.getPrepareStatementCount()).isEqualTo(2);
+    }
+
     // ---- 6.2 검색 ----
 
     @Test

@@ -2,8 +2,11 @@ package com.evision.station.query;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
@@ -34,6 +37,55 @@ public class StationQueryService {
     public StationQueryService(StationQueryRepository repository, ChargerStatusCodes statusCodes) {
         this.repository = repository;
         this.statusCodes = statusCodes;
+    }
+
+    /** FR-06 노선 목록. 충전소가 매핑된 노선만, 노선번호 순. 쿼리 2회. */
+    public RouteListResponse routes() {
+        Map<Long, RouteBuilder> byRoute = new HashMap<>();
+        for (StationQueryRepository.RouteDirectionRow r : repository.countRestAreaStationsByRoute()) {
+            RouteBuilder b = byRoute.computeIfAbsent(r.routeId(), id -> new RouteBuilder(id, r.routeNo(), r.routeName()));
+            b.directions.add(r.direction());
+            b.restAreaStations += r.stations();
+        }
+        for (StationQueryRepository.RouteIcRow r : repository.countIcStationsByRoute()) {
+            byRoute.computeIfAbsent(r.routeId(), id -> new RouteBuilder(id, r.routeNo(), r.routeName()))
+                    .icStations += r.stations();
+        }
+        List<RouteListResponse.RouteItem> routes = byRoute.values().stream()
+                .sorted(Comparator.comparingInt((RouteBuilder b) -> routeNoOrder(b.routeNo))
+                        .thenComparing(b -> b.routeNo))
+                .map(RouteBuilder::build)
+                .toList();
+        return new RouteListResponse(routes);
+    }
+
+    /** 노선번호는 문자열이라 숫자로 비교한다 (1, 10, 15, 100 …). 숫자가 아니면 뒤로 보낸다. */
+    private static int routeNoOrder(String routeNo) {
+        try {
+            return Integer.parseInt(routeNo);
+        } catch (NumberFormatException e) {
+            return Integer.MAX_VALUE;
+        }
+    }
+
+    private static final class RouteBuilder {
+        final long routeId;
+        final String routeNo;
+        final String routeName;
+        final TreeSet<String> directions = new TreeSet<>();
+        long restAreaStations;
+        long icStations;
+
+        RouteBuilder(long routeId, String routeNo, String routeName) {
+            this.routeId = routeId;
+            this.routeNo = routeNo;
+            this.routeName = routeName;
+        }
+
+        RouteListResponse.RouteItem build() {
+            return new RouteListResponse.RouteItem(routeId, routeNo, routeName, List.copyOf(directions),
+                    restAreaStations, icStations);
+        }
     }
 
     /** OP-01 충전소 검색. 쿼리 수는 결과 건수와 관계없이 3회 (충전소, 접근지점, 상태 집계). */

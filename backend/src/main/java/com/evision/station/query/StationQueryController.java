@@ -20,13 +20,22 @@ import io.swagger.v3.oas.annotations.tags.Tag;
  */
 @RestController
 @RequestMapping("/api")
-@Tag(name = "조회", description = "충전소 검색·상세, 충전기 상태 이력")
+@Tag(name = "조회", description = "노선 목록, 충전소 검색·상세, 충전기 상태 이력")
 public class StationQueryController {
 
     private final StationQueryService service;
 
     public StationQueryController(StationQueryService service) {
         this.service = service;
+    }
+
+    /** FR-06 노선 목록 */
+    @GetMapping("/routes")
+    @Operation(summary = "노선 목록",
+            description = "충전소가 매핑된 고속도로 노선만 노선번호 순으로 준다. directions는 검색의 direction 값으로 그대로 쓴다. "
+                    + "restAreaStations·icStations는 휴게소·IC에 매핑된 충전소 수(같은 충전소가 둘 다면 양쪽에 센다).")
+    public RouteListResponse routes() {
+        return service.routes();
     }
 
     /** OP-01 충전소 검색 */
