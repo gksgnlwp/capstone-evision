@@ -11,7 +11,7 @@
 |---|---|
 | `generate_data.sql` | 대용량 데이터 생성. 규모는 psql 변수로 바꾼다 (파일 머리말에 기본값과 근거) |
 | `queries.sql` | 측정 대상 쿼리 11개. 앱이 실제로 실행하는 SQL(Hibernate 로그)과 집계 SQL |
-| `indexes_drop.sql` / `indexes_create.sql` | 인덱스 적용 전 상태로 만들기 / V1 상태로 되돌리기 |
+| `indexes_drop.sql` / `indexes_create.sql` | 인덱스 적용 전 상태로 만들기 / 마이그레이션(V1·V3) 상태로 되돌리기 |
 | `run_perf.sh` | 전 → 후 순서로 EXPLAIN과 HTTP 응답시간을 재고 요약표를 만든다 |
 
 ## 절차 (Git Bash, backend 폴더에서)
