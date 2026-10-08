@@ -1,0 +1,333 @@
+### Q1 검색-영역: 충전소
+                                                                                                         QUERY PLAN                                                                                                          
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=1840.11..1840.12 rows=6 width=1896) (actual time=11.912..11.915 rows=5 loops=1)
+   Buffers: shared hit=862
+   ->  Sort  (cost=1840.11..1840.12 rows=6 width=1896) (actual time=11.911..11.913 rows=5 loops=1)
+         Sort Key: s1_0.station_id
+         Sort Method: quicksort  Memory: 25kB
+         Buffers: shared hit=862
+         ->  Hash Semi Join  (cost=292.43..1840.03 rows=6 width=1896) (actual time=11.869..11.878 rows=5 loops=1)
+               Hash Cond: (s1_0.station_id = sa1_0.station_id)
+               Buffers: shared hit=859
+               ->  Bitmap Heap Scan on station s1_0  (cost=273.23..1817.56 rows=1219 width=1896) (actual time=0.732..11.507 rows=1163 loops=1)
+                     Recheck Cond: ((latitude >= '36.951'::double precision) AND (latitude <= '37.251'::double precision) AND (longitude >= '127.388'::double precision) AND (longitude <= '127.788'::double precision))
+                     Filter: (del_yn = 'N'::bpchar)
+                     Heap Blocks: exact=816
+                     Buffers: shared hit=852
+                     ->  Bitmap Index Scan on idx_station_lat_lng  (cost=0.00..272.93 rows=1219 width=0) (actual time=0.627..0.628 rows=1163 loops=1)
+                           Index Cond: ((latitude >= '36.951'::double precision) AND (latitude <= '37.251'::double precision) AND (longitude >= '127.388'::double precision) AND (longitude <= '127.788'::double precision))
+                           Buffers: shared hit=36
+               ->  Hash  (cost=12.42..12.42 rows=542 width=8) (actual time=0.184..0.185 rows=542 loops=1)
+                     Buckets: 1024  Batches: 1  Memory Usage: 30kB
+                     Buffers: shared hit=7
+                     ->  Seq Scan on station_access sa1_0  (cost=0.00..12.42 rows=542 width=8) (actual time=0.026..0.087 rows=542 loops=1)
+                           Buffers: shared hit=7
+ Planning:
+   Buffers: shared hit=315
+ Planning Time: 1.471 ms
+ Execution Time: 12.013 ms
+(26 rows)
+
+### Q2 검색-영역: 접근지점
+                                                                        QUERY PLAN                                                                        
+----------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort  (cost=46.31..46.32 rows=7 width=182) (actual time=0.352..0.356 rows=7 loops=1)
+   Sort Key: sa1_0.station_id, sa1_0.access_id
+   Sort Method: quicksort  Memory: 26kB
+   Buffers: shared hit=31
+   ->  Nested Loop Left Join  (cost=22.73..46.21 rows=7 width=182) (actual time=0.191..0.317 rows=7 loops=1)
+         Buffers: shared hit=31
+         ->  Nested Loop Left Join  (cost=22.59..44.98 rows=7 width=164) (actual time=0.176..0.298 rows=7 loops=1)
+               Buffers: shared hit=27
+               ->  Hash Right Join  (cost=22.45..43.47 rows=7 width=146) (actual time=0.167..0.282 rows=7 loops=1)
+                     Hash Cond: (i1_0.ic_id = sa1_0.ic_id)
+                     Buffers: shared hit=17
+                     ->  Seq Scan on interchange i1_0  (cost=0.00..13.59 rows=659 width=51) (actual time=0.004..0.045 rows=659 loops=1)
+                           Buffers: shared hit=7
+                     ->  Hash  (cost=22.37..22.37 rows=7 width=103) (actual time=0.142..0.143 rows=7 loops=1)
+                           Buckets: 1024  Batches: 1  Memory Usage: 9kB
+                           Buffers: shared hit=10
+                           ->  Hash Right Join  (cost=15.90..22.37 rows=7 width=103) (actual time=0.101..0.137 rows=7 loops=1)
+                                 Hash Cond: (ra1_0.rest_area_id = sa1_0.rest_area_id)
+                                 Buffers: shared hit=10
+                                 ->  Seq Scan on rest_area ra1_0  (cost=0.00..5.10 rows=210 width=52) (actual time=0.010..0.024 rows=210 loops=1)
+                                       Buffers: shared hit=3
+                                 ->  Hash  (cost=15.81..15.81 rows=7 width=59) (actual time=0.073..0.073 rows=7 loops=1)
+                                       Buckets: 1024  Batches: 1  Memory Usage: 9kB
+                                       Buffers: shared hit=7
+                                       ->  Seq Scan on station_access sa1_0  (cost=0.00..15.81 rows=7 width=59) (actual time=0.013..0.063 rows=7 loops=1)
+                                             Filter: (station_id = ANY ('{1,38179,42421,80599,84841}'::bigint[]))
+                                             Rows Removed by Filter: 535
+                                             Buffers: shared hit=7
+               ->  Index Scan using route_pkey on route r1_0  (cost=0.14..0.21 rows=1 width=18) (actual time=0.002..0.002 rows=1 loops=7)
+                     Index Cond: (route_id = ra1_0.route_id)
+                     Buffers: shared hit=10
+         ->  Index Scan using route_pkey on route r2_0  (cost=0.14..0.18 rows=1 width=18) (actual time=0.002..0.002 rows=0 loops=7)
+               Index Cond: (route_id = i1_0.route_id)
+               Buffers: shared hit=4
+ Planning:
+   Buffers: shared hit=201
+ Planning Time: 0.843 ms
+ Execution Time: 0.440 ms
+(38 rows)
+
+### Q3 검색-영역: 급속 상태 집계
+                                                                      QUERY PLAN                                                                       
+-------------------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate  (cost=153.46..153.66 rows=9 width=33) (actual time=0.125..0.133 rows=11 loops=1)
+   Group Key: station_id, current_normalized_status
+   Buffers: shared hit=24
+   ->  Sort  (cost=153.46..153.48 rows=9 width=33) (actual time=0.114..0.116 rows=31 loops=1)
+         Sort Key: station_id, current_normalized_status
+         Sort Method: quicksort  Memory: 26kB
+         Buffers: shared hit=24
+         ->  Bitmap Heap Scan on charger c1_0  (cost=22.39..153.31 rows=9 width=33) (actual time=0.055..0.084 rows=31 loops=1)
+               Recheck Cond: (station_id = ANY ('{1,38179,42421,80599,84841}'::bigint[]))
+               Filter: (is_fast AND (del_yn = 'N'::bpchar))
+               Rows Removed by Filter: 3
+               Heap Blocks: exact=6
+               Buffers: shared hit=21
+               ->  Bitmap Index Scan on charger_station_id_chger_id_key  (cost=0.00..22.39 rows=34 width=0) (actual time=0.041..0.041 rows=34 loops=1)
+                     Index Cond: (station_id = ANY ('{1,38179,42421,80599,84841}'::bigint[]))
+                     Buffers: shared hit=15
+ Planning:
+   Buffers: shared hit=66
+ Planning Time: 0.268 ms
+ Execution Time: 0.165 ms
+(20 rows)
+
+### Q4 검색-전국(limit 500): 충전소
+                                                                                                          QUERY PLAN                                                                                                          
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=2932.67..2933.90 rows=493 width=1896) (actual time=2.203..2.284 rows=493 loops=1)
+   Buffers: shared hit=1486
+   ->  Sort  (cost=2932.67..2933.90 rows=493 width=1896) (actual time=2.201..2.253 rows=493 loops=1)
+         Sort Key: s1_0.station_id
+         Sort Method: quicksort  Memory: 90kB
+         Buffers: shared hit=1486
+         ->  Nested Loop  (cost=14.07..2910.62 rows=493 width=1896) (actual time=0.197..1.964 rows=493 loops=1)
+               Buffers: shared hit=1486
+               ->  HashAggregate  (cost=13.78..18.70 rows=493 width=8) (actual time=0.168..0.247 rows=493 loops=1)
+                     Group Key: sa1_0.station_id
+                     Batches: 1  Memory Usage: 73kB
+                     Buffers: shared hit=7
+                     ->  Seq Scan on station_access sa1_0  (cost=0.00..12.42 rows=542 width=8) (actual time=0.011..0.069 rows=542 loops=1)
+                           Buffers: shared hit=7
+               ->  Index Scan using station_pkey on station s1_0  (cost=0.29..5.89 rows=1 width=1896) (actual time=0.003..0.003 rows=1 loops=493)
+                     Index Cond: (station_id = sa1_0.station_id)
+                     Filter: ((latitude >= '33'::double precision) AND (latitude <= '39'::double precision) AND (longitude >= '124'::double precision) AND (longitude <= '132'::double precision) AND (del_yn = 'N'::bpchar))
+                     Buffers: shared hit=1479
+ Planning:
+   Buffers: shared hit=20
+ Planning Time: 0.511 ms
+ Execution Time: 2.375 ms
+(22 rows)
+
+### Q5 검색-전국(limit 500): 급속 상태 집계
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       QUERY PLAN                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate  (cost=9210.36..9229.42 rows=845 width=33) (actual time=13.016..13.758 rows=1051 loops=1)
+   Group Key: station_id, current_normalized_status
+   Buffers: shared hit=1525
+   ->  Sort  (cost=9210.36..9212.48 rows=849 width=33) (actual time=13.006..13.117 rows=2679 loops=1)
+         Sort Key: station_id, current_normalized_status
+         Sort Method: quicksort  Memory: 243kB
+         Buffers: shared hit=1525
+         ->  Bitmap Heap Scan on charger c1_0  (cost=2004.85..9169.06 rows=849 width=33) (actual time=1.859..12.176 rows=2679 loops=1)
+               Recheck Cond: (station_id = ANY ('{1,203,405,607,809,1011,1213,1415,1617,1819,2021,2223,2425,2627,2829,3031,3233,3435,3637,3839,4041,4243,4445,4647,4849,5051,5253,5455,5657,5859,6061,6263,6465,6667,6869,7071,7273,7475,7677,7879,8081,8283,8485,8687,8889,9091,9293,9495,9697,9899,10101,10303,10505,10707,10909,11111,11313,11515,11717,11919,12121,12323,12525,12727,12929,13131,13333,13535,13737,13939,14141,14343,14545,14747,14949,15151,15353,15555,15757,15959,16161,16363,16565,16767,16969,17171,17373,17575,17777,17979,18181,18383,18585,18787,18989,19191,19393,19595,19797,19999,20201,20403,20605,20807,21009,21211,21413,21615,21817,22019,22221,22423,22625,22827,23029,23231,23433,23635,23837,24039,24241,24443,24645,24847,25049,25251,25453,25655,25857,26059,26261,26463,26665,26867,27069,27271,27473,27675,27877,28079,28281,28483,28685,28887,29089,29291,29493,29695,29897,30099,30301,30503,30705,30907,31109,31311,31513,31715,31917,32119,32321,32523,32725,32927,33129,33331,33533,33735,33937,34139,34341,34543,34745,34947,35149,35351,35553,35755,35957,36159,36361,36563,36765,36967,37169,37371,37573,37775,37977,38179,38381,38583,38785,38987,39189,39391,39593,39795,39997,40199,40401,40603,40805,41007,41209,41411,41613,41815,42017,42219,42421,42623,42825,43027,43229,43431,43633,43835,44037,44239,44441,44643,44845,45047,45249,45451,45653,45855,46057,46259,46461,46663,46865,47067,47269,47471,47673,47875,48077,48279,48481,48683,48885,49087,49289,49491,49693,49895,50097,50299,50501,50703,50905,51107,51309,51511,51713,51915,52117,52319,52521,52723,52925,53127,53329,53531,53733,53935,54137,54339,54541,54743,54945,55147,55349,55551,55753,55955,56157,56359,56561,56763,56965,57167,57369,57571,57773,57975,58177,58379,58581,58783,58985,59187,59389,59591,59793,59995,60197,60399,60601,60803,61005,61207,61409,61611,61813,62015,62217,62419,62621,62823,63025,63227,63429,63631,63833,64035,64237,64439,64641,64843,65045,65247,65449,65651,65853,66055,66257,66459,66661,66863,67065,67267,67469,67671,67873,68075,68277,68479,68681,68883,69085,69287,69489,69691,69893,70095,70297,70499,70701,70903,71105,71307,71509,71711,71913,72115,72317,72519,72721,72923,73125,73327,73529,73731,73933,74135,74337,74539,74741,74943,75145,75347,75549,75751,75953,76155,76357,76559,76761,76963,77165,77367,77569,77771,77973,78175,78377,78579,78781,78983,79185,79387,79589,79791,79993,80195,80397,80599,80801,81003,81205,81407,81609,81811,82013,82215,82417,82619,82821,83023,83225,83427,83629,83831,84033,84235,84437,84639,84841,85043,85245,85447,85649,85851,86053,86255,86457,86659,86861,87063,87265,87467,87669,87871,88073,88275,88477,88679,88881,89083,89285,89487,89689,89891,90093,90295,90497,90699,90901,91103,91305,91507,91709,91911,92113,92315,92517,92719,92921,93123,93325,93527,93729,93931,94133,94335,94537,94739,94941,95143,95345,95547,95749,95951,96153,96355,96557,96759,96961,97163,97365,97567,97769,97971,98173,98375,98577,98779,98981,99183,99385}'::bigint[]))
+               Filter: (is_fast AND (del_yn = 'N'::bpchar))
+               Rows Removed by Filter: 285
+               Heap Blocks: exact=35
+               Buffers: shared hit=1525
+               ->  Bitmap Index Scan on charger_station_id_chger_id_key  (cost=0.00..2003.41 rows=3353 width=0) (actual time=1.835..1.836 rows=2964 loops=1)
+                     Index Cond: (station_id = ANY ('{1,203,405,607,809,1011,1213,1415,1617,1819,2021,2223,2425,2627,2829,3031,3233,3435,3637,3839,4041,4243,4445,4647,4849,5051,5253,5455,5657,5859,6061,6263,6465,6667,6869,7071,7273,7475,7677,7879,8081,8283,8485,8687,8889,9091,9293,9495,9697,9899,10101,10303,10505,10707,10909,11111,11313,11515,11717,11919,12121,12323,12525,12727,12929,13131,13333,13535,13737,13939,14141,14343,14545,14747,14949,15151,15353,15555,15757,15959,16161,16363,16565,16767,16969,17171,17373,17575,17777,17979,18181,18383,18585,18787,18989,19191,19393,19595,19797,19999,20201,20403,20605,20807,21009,21211,21413,21615,21817,22019,22221,22423,22625,22827,23029,23231,23433,23635,23837,24039,24241,24443,24645,24847,25049,25251,25453,25655,25857,26059,26261,26463,26665,26867,27069,27271,27473,27675,27877,28079,28281,28483,28685,28887,29089,29291,29493,29695,29897,30099,30301,30503,30705,30907,31109,31311,31513,31715,31917,32119,32321,32523,32725,32927,33129,33331,33533,33735,33937,34139,34341,34543,34745,34947,35149,35351,35553,35755,35957,36159,36361,36563,36765,36967,37169,37371,37573,37775,37977,38179,38381,38583,38785,38987,39189,39391,39593,39795,39997,40199,40401,40603,40805,41007,41209,41411,41613,41815,42017,42219,42421,42623,42825,43027,43229,43431,43633,43835,44037,44239,44441,44643,44845,45047,45249,45451,45653,45855,46057,46259,46461,46663,46865,47067,47269,47471,47673,47875,48077,48279,48481,48683,48885,49087,49289,49491,49693,49895,50097,50299,50501,50703,50905,51107,51309,51511,51713,51915,52117,52319,52521,52723,52925,53127,53329,53531,53733,53935,54137,54339,54541,54743,54945,55147,55349,55551,55753,55955,56157,56359,56561,56763,56965,57167,57369,57571,57773,57975,58177,58379,58581,58783,58985,59187,59389,59591,59793,59995,60197,60399,60601,60803,61005,61207,61409,61611,61813,62015,62217,62419,62621,62823,63025,63227,63429,63631,63833,64035,64237,64439,64641,64843,65045,65247,65449,65651,65853,66055,66257,66459,66661,66863,67065,67267,67469,67671,67873,68075,68277,68479,68681,68883,69085,69287,69489,69691,69893,70095,70297,70499,70701,70903,71105,71307,71509,71711,71913,72115,72317,72519,72721,72923,73125,73327,73529,73731,73933,74135,74337,74539,74741,74943,75145,75347,75549,75751,75953,76155,76357,76559,76761,76963,77165,77367,77569,77771,77973,78175,78377,78579,78781,78983,79185,79387,79589,79791,79993,80195,80397,80599,80801,81003,81205,81407,81609,81811,82013,82215,82417,82619,82821,83023,83225,83427,83629,83831,84033,84235,84437,84639,84841,85043,85245,85447,85649,85851,86053,86255,86457,86659,86861,87063,87265,87467,87669,87871,88073,88275,88477,88679,88881,89083,89285,89487,89689,89891,90093,90295,90497,90699,90901,91103,91305,91507,91709,91911,92113,92315,92517,92719,92921,93123,93325,93527,93729,93931,94133,94335,94537,94739,94941,95143,95345,95547,95749,95951,96153,96355,96557,96759,96961,97163,97365,97567,97769,97971,98173,98375,98577,98779,98981,99183,99385}'::bigint[]))
+                     Buffers: shared hit=1490
+ Planning:
+   Buffers: shared hit=5
+ Planning Time: 0.543 ms
+ Execution Time: 13.884 ms
+(20 rows)
+
+### Q6 검색-노선+방향: 충전소
+                                                                       QUERY PLAN                                                                       
+--------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=132.00..132.04 rows=15 width=1896) (actual time=0.386..0.389 rows=7 loops=1)
+   Buffers: shared hit=38
+   ->  Sort  (cost=132.00..132.04 rows=15 width=1896) (actual time=0.385..0.387 rows=7 loops=1)
+         Sort Key: s1_0.station_id
+         Sort Method: quicksort  Memory: 25kB
+         Buffers: shared hit=38
+         ->  Nested Loop  (cost=43.67..131.71 rows=15 width=1896) (actual time=0.355..0.379 rows=7 loops=1)
+               Buffers: shared hit=38
+               ->  HashAggregate  (cost=43.38..43.53 rows=15 width=8) (actual time=0.344..0.347 rows=7 loops=1)
+                     Group Key: sa1_0.station_id
+                     Batches: 1  Memory Usage: 24kB
+                     Buffers: shared hit=17
+                     ->  Hash Left Join  (cost=28.77..43.34 rows=15 width=8) (actual time=0.215..0.341 rows=7 loops=1)
+                           Hash Cond: (sa1_0.ic_id = i1_0.ic_id)
+                           Filter: ((ra1_0.route_id = 1) OR (i1_0.route_id = 1))
+                           Rows Removed by Filter: 240
+                           Buffers: shared hit=17
+                           ->  Hash Join  (cost=6.94..20.80 rows=271 width=24) (actual time=0.055..0.161 rows=247 loops=1)
+                                 Hash Cond: (sa1_0.rest_area_id = ra1_0.rest_area_id)
+                                 Buffers: shared hit=10
+                                 ->  Seq Scan on station_access sa1_0  (cost=0.00..12.42 rows=542 width=24) (actual time=0.010..0.039 rows=542 loops=1)
+                                       Buffers: shared hit=7
+                                 ->  Hash  (cost=5.62..5.62 rows=105 width=16) (actual time=0.040..0.041 rows=105 loops=1)
+                                       Buckets: 1024  Batches: 1  Memory Usage: 13kB
+                                       Buffers: shared hit=3
+                                       ->  Seq Scan on rest_area ra1_0  (cost=0.00..5.62 rows=105 width=16) (actual time=0.006..0.027 rows=105 loops=1)
+                                             Filter: ((direction)::text = '상행'::text)
+                                             Rows Removed by Filter: 105
+                                             Buffers: shared hit=3
+                           ->  Hash  (cost=13.59..13.59 rows=659 width=16) (actual time=0.143..0.143 rows=659 loops=1)
+                                 Buckets: 1024  Batches: 1  Memory Usage: 39kB
+                                 Buffers: shared hit=7
+                                 ->  Seq Scan on interchange i1_0  (cost=0.00..13.59 rows=659 width=16) (actual time=0.004..0.059 rows=659 loops=1)
+                                       Buffers: shared hit=7
+               ->  Index Scan using station_pkey on station s1_0  (cost=0.29..5.88 rows=1 width=1896) (actual time=0.004..0.004 rows=1 loops=7)
+                     Index Cond: (station_id = sa1_0.station_id)
+                     Filter: (del_yn = 'N'::bpchar)
+                     Buffers: shared hit=21
+ Planning:
+   Buffers: shared hit=32
+ Planning Time: 0.526 ms
+ Execution Time: 0.429 ms
+(42 rows)
+
+### Q7 상세: 충전소
+                                                          QUERY PLAN                                                          
+------------------------------------------------------------------------------------------------------------------------------
+ Index Scan using station_pkey on station s1_0  (cost=0.29..8.31 rows=1 width=1896) (actual time=0.039..0.039 rows=1 loops=1)
+   Index Cond: (station_id = 1)
+   Filter: (del_yn = 'N'::bpchar)
+   Buffers: shared hit=6
+ Planning:
+   Buffers: shared hit=5
+ Planning Time: 0.090 ms
+ Execution Time: 0.053 ms
+(8 rows)
+
+### Q8 상세: 접근지점
+                                                                                              QUERY PLAN                                                                                              
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort  (cost=22.91..22.92 rows=1 width=182) (actual time=0.092..0.095 rows=1 loops=1)
+   Sort Key: sa1_0.access_id
+   Sort Method: quicksort  Memory: 25kB
+   Buffers: shared hit=8
+   ->  Nested Loop Left Join  (cost=8.86..22.90 rows=1 width=182) (actual time=0.056..0.089 rows=1 loops=1)
+         Buffers: shared hit=8
+         ->  Nested Loop Left Join  (cost=8.72..22.68 rows=1 width=164) (actual time=0.051..0.084 rows=1 loops=1)
+               Buffers: shared hit=6
+               ->  Hash Right Join  (cost=8.30..14.20 rows=1 width=103) (actual time=0.048..0.080 rows=1 loops=1)
+                     Hash Cond: (ra1_0.rest_area_id = sa1_0.rest_area_id)
+                     Buffers: shared hit=6
+                     ->  Seq Scan on rest_area ra1_0  (cost=0.00..5.10 rows=210 width=52) (actual time=0.012..0.024 rows=210 loops=1)
+                           Buffers: shared hit=3
+                     ->  Hash  (cost=8.29..8.29 rows=1 width=59) (actual time=0.030..0.031 rows=1 loops=1)
+                           Buckets: 1024  Batches: 1  Memory Usage: 9kB
+                           Buffers: shared hit=3
+                           ->  Index Scan using station_access_station_id_rest_area_id_ic_id_key on station_access sa1_0  (cost=0.28..8.29 rows=1 width=59) (actual time=0.012..0.013 rows=1 loops=1)
+                                 Index Cond: (station_id = 1)
+                                 Buffers: shared hit=3
+               ->  Nested Loop Left Join  (cost=0.42..8.47 rows=1 width=69) (actual time=0.002..0.002 rows=0 loops=1)
+                     ->  Index Scan using interchange_pkey on interchange i1_0  (cost=0.28..8.29 rows=1 width=51) (actual time=0.001..0.001 rows=0 loops=1)
+                           Index Cond: (ic_id = sa1_0.ic_id)
+                     ->  Index Scan using route_pkey on route r2_0  (cost=0.14..0.18 rows=1 width=18) (never executed)
+                           Index Cond: (route_id = i1_0.route_id)
+         ->  Index Scan using route_pkey on route r1_0  (cost=0.14..0.21 rows=1 width=18) (actual time=0.003..0.004 rows=1 loops=1)
+               Index Cond: (route_id = ra1_0.route_id)
+               Buffers: shared hit=2
+ Planning:
+   Buffers: shared hit=33
+ Planning Time: 0.510 ms
+ Execution Time: 0.140 ms
+(31 rows)
+
+### Q9 상세: 충전기 목록
+                                                                  QUERY PLAN                                                                   
+-----------------------------------------------------------------------------------------------------------------------------------------------
+ Sort  (cost=32.15..32.17 rows=7 width=106) (actual time=0.035..0.036 rows=10 loops=1)
+   Sort Key: chger_id
+   Sort Method: quicksort  Memory: 25kB
+   Buffers: shared hit=7
+   ->  Bitmap Heap Scan on charger c1_0  (cost=4.48..32.05 rows=7 width=106) (actual time=0.016..0.019 rows=10 loops=1)
+         Recheck Cond: (station_id = 1)
+         Filter: (del_yn = 'N'::bpchar)
+         Heap Blocks: exact=1
+         Buffers: shared hit=4
+         ->  Bitmap Index Scan on charger_station_id_chger_id_key  (cost=0.00..4.48 rows=7 width=0) (actual time=0.007..0.007 rows=10 loops=1)
+               Index Cond: (station_id = 1)
+               Buffers: shared hit=3
+ Planning:
+   Buffers: shared hit=19
+ Planning Time: 0.114 ms
+ Execution Time: 0.052 ms
+(16 rows)
+
+### Q10 이력: 7일 첫 페이지 (size 100)
+                                                                                            QUERY PLAN                                                                                             
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Limit  (cost=0.56..129.18 rows=31 width=73) (actual time=0.021..0.089 rows=31 loops=1)
+   Buffers: shared hit=35
+   ->  Index Scan using charger_status_history_charger_id_status_updated_at_key on charger_status_history csh1_0  (cost=0.56..129.18 rows=31 width=73) (actual time=0.020..0.085 rows=31 loops=1)
+         Index Cond: ((charger_id = 1) AND (status_updated_at >= '2026-09-21 00:00:00'::timestamp without time zone) AND (status_updated_at < '2026-09-28 00:00:00'::timestamp without time zone))
+         Buffers: shared hit=35
+ Planning:
+   Buffers: shared hit=80
+ Planning Time: 0.272 ms
+ Execution Time: 0.104 ms
+(9 rows)
+
+### Q11 집계 입력: 30분 구간 1개의 관측 시점별 상태 분포
+                                                                                                           QUERY PLAN                                                                                                           
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate  (cost=40044.48..40273.71 rows=5094 width=48) (actual time=131.472..136.696 rows=2958 loops=1)
+   Group Key: c.station_id, (('2026-09-27 18:00:00'::timestamp without time zone + make_interval(0, 0, 0, 0, 0, (n.n * 5), '0'::double precision)))
+   Buffers: shared hit=82405
+   ->  Sort  (cost=40044.48..40057.21 rows=5094 width=26) (actual time=131.456..132.804 rows=16074 loops=1)
+         Sort Key: c.station_id, (('2026-09-27 18:00:00'::timestamp without time zone + make_interval(0, 0, 0, 0, 0, (n.n * 5), '0'::double precision)))
+         Sort Method: quicksort  Memory: 1138kB
+         Buffers: shared hit=82405
+         ->  Nested Loop Left Join  (cost=14.92..39730.82 rows=5094 width=26) (actual time=0.236..121.609 rows=16074 loops=1)
+               Buffers: shared hit=82402
+               ->  Nested Loop Left Join  (cost=14.77..39557.58 rows=5094 width=14) (actual time=0.209..102.411 rows=16074 loops=1)
+                     Buffers: shared hit=82394
+                     ->  Nested Loop  (cost=14.20..14048.97 rows=5094 width=20) (actual time=0.147..7.576 rows=16074 loops=1)
+                           Buffers: shared hit=2024
+                           ->  Function Scan on generate_series n  (cost=0.00..0.06 rows=6 width=4) (actual time=0.004..0.009 rows=6 loops=1)
+                           ->  Materialize  (cost=14.20..13987.35 rows=849 width=16) (actual time=0.024..0.878 rows=2679 loops=6)
+                                 Buffers: shared hit=2024
+                                 ->  Nested Loop  (cost=14.20..13983.11 rows=849 width=16) (actual time=0.140..3.681 rows=2679 loops=1)
+                                       Buffers: shared hit=2024
+                                       ->  HashAggregate  (cost=13.78..18.70 rows=493 width=8) (actual time=0.129..0.292 rows=493 loops=1)
+                                             Group Key: sa.station_id
+                                             Batches: 1  Memory Usage: 73kB
+                                             Buffers: shared hit=7
+                                             ->  Seq Scan on station_access sa  (cost=0.00..12.42 rows=542 width=8) (actual time=0.009..0.038 rows=542 loops=1)
+                                                   Buffers: shared hit=7
+                                       ->  Index Scan using charger_station_id_chger_id_key on charger c  (cost=0.42..28.31 rows=2 width=16) (actual time=0.004..0.006 rows=5 loops=493)
+                                             Index Cond: (station_id = sa.station_id)
+                                             Filter: (is_fast AND (del_yn = 'N'::bpchar))
+                                             Rows Removed by Filter: 1
+                                             Buffers: shared hit=2017
+                     ->  Limit  (cost=0.57..4.99 rows=1 width=10) (actual time=0.006..0.006 rows=1 loops=16074)
+                           Buffers: shared hit=80370
+                           ->  Index Scan Backward using charger_status_history_charger_id_status_updated_at_key on charger_status_history h  (cost=0.57..44.75 rows=10 width=10) (actual time=0.005..0.005 rows=1 loops=16074)
+                                 Index Cond: ((charger_id = c.charger_id) AND (status_updated_at <= ('2026-09-27 18:00:00'::timestamp without time zone + make_interval(0, 0, 0, 0, 0, (n.n * 5), '0'::double precision))))
+                                 Buffers: shared hit=80370
+               ->  Memoize  (cost=0.15..8.17 rows=1 width=12) (actual time=0.001..0.001 rows=1 loops=16074)
+                     Cache Key: (h.status_code)::text
+                     Cache Mode: logical
+                     Hits: 16070  Misses: 4  Evictions: 0  Overflows: 0  Memory Usage: 1kB
+                     Buffers: shared hit=8
+                     ->  Index Scan using code_dictionary_code_group_code_key on code_dictionary cd  (cost=0.14..8.16 rows=1 width=12) (actual time=0.006..0.006 rows=1 loops=4)
+                           Index Cond: (((code_group)::text = 'CHARGER_STAT'::text) AND ((code)::text = (h.status_code)::text))
+                           Buffers: shared hit=8
+ Planning:
+   Buffers: shared hit=199
+ Planning Time: 0.881 ms
+ Execution Time: 137.083 ms
+(46 rows)
+
