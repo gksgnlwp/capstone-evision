@@ -14,12 +14,14 @@ public record StationSearchResponse(int count, int limit, boolean truncated, Lis
      * 급속 충전기 기준 상태별 대수. 상태를 아직 모르는 충전기는 unknownCount에 들어가며,
      * 0대(availableCount = 0)와 미확인을 섞지 않는다.
      *
+     * @param busiId                운영기관 코드. 선호 운영기관 강조용 (FR-36, 운영기관 목록의 busiId와 같음)
      * @param latestStatusUpdatedAt 급속 충전기 상태갱신일시 중 가장 최근 값 (급속 충전기가 없거나 상태 기록이 없으면 null)
      */
     public record StationSummary(
             long stationId,
             String statId,
             String name,
+            String busiId,
             double lat,
             double lng,
             List<AccessPointView> accesses,
