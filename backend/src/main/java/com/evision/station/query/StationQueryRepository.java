@@ -41,10 +41,11 @@ public class StationQueryRepository {
         this.query = query;
     }
 
-    /** OP-01 조건에 맞는 서비스 대상(접근지점 매핑 있음) 충전소. station_id 순으로 최대 fetchSize개. */
+    /** OP-01 조건에 맞는 서비스 대상(접근지점 매핑·급속 충전기 있음) 충전소. station_id 순으로 최대 fetchSize개. */
     public List<Station> searchStations(StationSearchCondition c, int fetchSize) {
         return query.selectFrom(station)
                 .where(station.deleted.isFalse(),
+                        hasActiveFastCharger(),
                         inArea(c),
                         JPAExpressions.selectOne()
                                 .from(stationAccess)
@@ -80,7 +81,7 @@ public class StationQueryRepository {
     public record RouteIcRow(Long routeId, String routeNo, String routeName, Long stations) {
     }
 
-    /** FR-06 노선·방향별 휴게소 매핑 충전소 수 (삭제된 충전소 제외) */
+    /** FR-06 노선·방향별 휴게소 매핑 충전소 수 (서비스 대상만: 삭제 제외, 급속 충전기 있음) */
     public List<RouteDirectionRow> countRestAreaStationsByRoute() {
         return query.select(Projections.constructor(RouteDirectionRow.class,
                         restAreaRoute.id, restAreaRoute.routeNo, restAreaRoute.routeName, restArea.direction,
@@ -89,12 +90,12 @@ public class StationQueryRepository {
                 .join(stationAccess.restArea, restArea)
                 .join(restArea.route, restAreaRoute)
                 .join(stationAccess.station, station)
-                .where(station.deleted.isFalse())
+                .where(station.deleted.isFalse(), hasActiveFastCharger())
                 .groupBy(restAreaRoute.id, restAreaRoute.routeNo, restAreaRoute.routeName, restArea.direction)
                 .fetch();
     }
 
-    /** FR-06 노선별 IC 매핑 충전소 수 (삭제된 충전소 제외) */
+    /** FR-06 노선별 IC 매핑 충전소 수 (서비스 대상만: 삭제 제외, 급속 충전기 있음) */
     public List<RouteIcRow> countIcStationsByRoute() {
         return query.select(Projections.constructor(RouteIcRow.class,
                         icRoute.id, icRoute.routeNo, icRoute.routeName, stationAccess.station.id.countDistinct()))
@@ -102,7 +103,7 @@ public class StationQueryRepository {
                 .join(stationAccess.interchange, interchange)
                 .join(interchange.route, icRoute)
                 .join(stationAccess.station, station)
-                .where(station.deleted.isFalse())
+                .where(station.deleted.isFalse(), hasActiveFastCharger())
                 .groupBy(icRoute.id, icRoute.routeNo, icRoute.routeName)
                 .fetch();
     }
@@ -111,7 +112,7 @@ public class StationQueryRepository {
     }
 
     /**
-     * FR-34 서비스 대상(접근지점 매핑 있음, 삭제 제외) 충전소의 운영기관별 충전소 수.
+     * FR-34 서비스 대상(접근지점 매핑·급속 충전기 있음, 삭제 제외) 충전소의 운영기관별 충전소 수.
      * 원천 기관명(bnm)은 코드마다 하나라 max로 고른다.
      */
     public List<OperatorRow> countStationsByOperator() {
@@ -119,6 +120,7 @@ public class StationQueryRepository {
                         station.busiId, station.orgName.max(), station.id.count()))
                 .from(station)
                 .where(station.deleted.isFalse(),
+                        hasActiveFastCharger(),
                         JPAExpressions.selectOne()
                                 .from(stationAccess)
                                 .where(stationAccess.station.eq(station))
@@ -203,6 +205,14 @@ public class StationQueryRepository {
 
     private BooleanExpression accessTypeEq(AccessType accessType) {
         return accessType == null ? null : stationAccess.accessType.eq(accessType);
+    }
+
+    /** OP-101 서비스 노출 조건: 삭제되지 않은 급속 충전기가 1대 이상. 급속이 모두 철거된 충전소는 매핑이 남아도 숨긴다. */
+    private BooleanExpression hasActiveFastCharger() {
+        return JPAExpressions.selectOne()
+                .from(charger)
+                .where(charger.station.eq(station), charger.fast.isTrue(), charger.deleted.isFalse())
+                .exists();
     }
 
     private BooleanExpression hasChargerType(String chargerType) {

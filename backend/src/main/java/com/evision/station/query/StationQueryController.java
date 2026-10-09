@@ -50,7 +50,7 @@ public class StationQueryController {
     /** OP-01 충전소 검색 */
     @GetMapping("/stations")
     @Operation(summary = "충전소 검색",
-            description = "지도 영역(4개 값 모두) 또는 routeId 중 하나는 필수. 접근지점(휴게소·IC)이 매핑된 충전소만 나온다. "
+            description = "지도 영역(4개 값 모두) 또는 routeId 중 하나는 필수. 접근지점(휴게소·IC)이 매핑되고 급속 충전기가 있는 충전소만 나온다. "
                     + "상태 대수는 급속 충전기 기준이며, 0건이면 빈 목록으로 200을 준다.")
     public StationSearchResponse search(
             @RequestParam(required = false) Double minLat,

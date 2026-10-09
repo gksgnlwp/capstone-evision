@@ -36,7 +36,7 @@ import jakarta.persistence.EntityManagerFactory;
  * S2 (36.81, 127.21) → RA2, IC1   급속 1대 (타입 07, 충전중)
  * S3 (36.82, 127.22) 매핑 없음 → 검색 제외
  * S4 (36.80, 127.20) → RA1, 삭제됨 → 검색·상세 제외
- * S5 (37.50, 127.00) → IC1, 영역 밖
+ * S5 (37.50, 127.00) → IC1, 영역 밖, 충전기 없음 → 급속이 없어 검색·노선·운영기관 제외 (OP-101)
  * 운영기관은 모두 ME(환경부)
  * </pre>
  */
@@ -100,7 +100,7 @@ class StationQueryControllerTest {
 
     @Test
     void 충전소가_매핑된_노선만_노선번호_순으로_방향과_함께_나온다() throws Exception {
-        // 노선 A(10): 상행 휴게소 S1(삭제된 S4 제외), 하행 휴게소 S2 / 노선 B(500): IC1에 S2·S5
+        // 노선 A(10): 상행 휴게소 S1(삭제된 S4 제외), 하행 휴게소 S2 / 노선 B(500): IC1에 S2(급속 없는 S5 제외)
         jdbc.update("INSERT INTO route (route_no, route_name) VALUES ('35', '중부선')");   // 매핑 없는 노선은 빠진다
         Statistics stats = statistics();
         mvc.perform(get("/api/routes"))
@@ -112,7 +112,7 @@ class StationQueryControllerTest {
                 .andExpect(jsonPath("$.routes[0].icStations").value(0))
                 .andExpect(jsonPath("$.routes[1].directions.length()").value(0))
                 .andExpect(jsonPath("$.routes[1].restAreaStations").value(0))
-                .andExpect(jsonPath("$.routes[1].icStations").value(2));
+                .andExpect(jsonPath("$.routes[1].icStations").value(1));
         assertThat(stats.getPrepareStatementCount()).isEqualTo(2);
     }
 
@@ -121,6 +121,7 @@ class StationQueryControllerTest {
     @Test
     void 운영기관_목록은_서비스_대상_충전소만_충전소_수가_많은_순으로_센다() throws Exception {
         // 서비스 대상: S1·S5(ME), S2(ST). 매핑 없는 S3(CV)과 삭제된 S4는 세지 않는다
+        charger(s5, "01", "04", true, false, "2", "AVAILABLE", T);
         operator("ST000002", "ST", "SK일렉링크");
         operator("ST000003", "CV", "채비");
         Statistics stats = statistics();
@@ -136,14 +137,15 @@ class StationQueryControllerTest {
 
     @Test
     void 운영기관별_충전소_수의_합은_서비스_대상_충전소_수와_같다() throws Exception {
-        // TC-34. 서비스 대상 = 삭제되지 않고 접근지점 매핑이 있는 충전소 (S1, S2, S5)
+        // TC-34. 서비스 대상 = 삭제되지 않고 접근지점 매핑과 급속 충전기가 있는 충전소 (S1, S2. S5는 급속 없음)
         operator("ST000002", "ST", "SK일렉링크");
         long serviceStations = id("""
                 SELECT count(*) FROM station s
-                WHERE s.del_yn = 'N' AND EXISTS (SELECT 1 FROM station_access sa WHERE sa.station_id = s.station_id)""");
+                WHERE s.del_yn = 'N' AND EXISTS (SELECT 1 FROM station_access sa WHERE sa.station_id = s.station_id)
+                  AND EXISTS (SELECT 1 FROM charger c WHERE c.station_id = s.station_id AND c.is_fast AND c.del_yn = 'N')""");
         String body = mvc.perform(get("/api/operators")).andReturn().getResponse().getContentAsString();
         List<Integer> counts = JsonPath.read(body, "$.operators[*].stationCount");
-        assertThat(counts.stream().mapToLong(Integer::longValue).sum()).isEqualTo(serviceStations).isEqualTo(3);
+        assertThat(counts.stream().mapToLong(Integer::longValue).sum()).isEqualTo(serviceStations).isEqualTo(2);
     }
 
     @Test
@@ -187,15 +189,12 @@ class StationQueryControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.stations[*].statId", contains("ST000001")));
 
-        // 노선 B는 IC1만 있다. S2의 접근지점도 조건에 맞는 IC만 내려준다.
+        // 노선 B는 IC1만 있다. S2의 접근지점도 조건에 맞는 IC만 내려준다. S5는 급속이 없어 빠진다
         mvc.perform(get("/api/stations").param("routeId", String.valueOf(routeB)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.stations[*].statId", contains("ST000002", "ST000005")))
+                .andExpect(jsonPath("$.stations[*].statId", contains("ST000002")))
                 .andExpect(jsonPath("$.stations[0].accesses.length()").value(1))
-                .andExpect(jsonPath("$.stations[0].accesses[0].accessType").value("IC"))
-                // 급속 충전기가 없는 충전소는 0대이고 최근 갱신일시는 null
-                .andExpect(jsonPath("$.stations[1].fastChargerCount").value(0))
-                .andExpect(jsonPath("$.stations[1].latestStatusUpdatedAt").doesNotExist());
+                .andExpect(jsonPath("$.stations[0].accesses[0].accessType").value("IC"));
     }
 
     @Test
@@ -205,6 +204,7 @@ class StationQueryControllerTest {
                 INSERT INTO interchange (route_id, facility_code, name, facility_type, latitude, longitude)
                 VALUES (?, '0010I00001', '북천안IC', 'IC', 36.9, 127.1) RETURNING ic_id""", routeA);
         long s6 = station("ST000006", 37.60, 127.10, false);
+        charger(s6, "01", "04", true, false, "2", "AVAILABLE", T);
         mapIc(s6, ic2);
 
         // 노선 A + 상행: 상행 휴게소(S1)와 노선 A의 IC(S6). S2는 하행 휴게소와 노선 B IC라 빠진다
@@ -233,6 +233,25 @@ class StationQueryControllerTest {
         // 삭제된 충전기나 다른 충전소의 타입으로는 걸리지 않는다
         mvc.perform(get("/api/stations").param("routeId", String.valueOf(routeB)).param("chargerType", "04"))
                 .andExpect(jsonPath("$.count").value(0));
+    }
+
+    @Test
+    void 급속_충전기가_없는_충전소는_매핑이_있어도_검색에서_빠진다() throws Exception {
+        // OP-101: 영역 안 S7은 휴게소·IC에 매핑됐지만 완속과 삭제된 급속만 있다
+        long s7 = station("ST000007", 36.83, 127.23, false);
+        charger(s7, "01", "02", false, false, "2", "AVAILABLE", T);
+        charger(s7, "02", "04", true, true, "2", "AVAILABLE", T);
+        mapRestArea(s7, ra1);
+        mapIc(s7, ic1);
+        mvc.perform(area(get("/api/stations")))
+                .andExpect(jsonPath("$.stations[*].statId", contains("ST000001", "ST000002")));
+        mvc.perform(get("/api/stations").param("routeId", String.valueOf(routeA)))
+                .andExpect(jsonPath("$.stations[*].statId", contains("ST000001", "ST000002")));
+        mvc.perform(get("/api/routes"))
+                .andExpect(jsonPath("$.routes[0].restAreaStations").value(2))
+                .andExpect(jsonPath("$.routes[1].icStations").value(1));
+        mvc.perform(get("/api/operators"))
+                .andExpect(jsonPath("$.operators[0].stationCount").value(2));
     }
 
     @Test
