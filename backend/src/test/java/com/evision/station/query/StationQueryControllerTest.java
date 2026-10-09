@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import org.hibernate.SessionFactory;
 import org.hibernate.stat.Statistics;
@@ -22,6 +23,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 
 import com.evision.TestcontainersConfiguration;
 import com.evision.support.TestDb;
+import com.jayway.jsonpath.JsonPath;
 
 import jakarta.persistence.EntityManagerFactory;
 
@@ -35,6 +37,7 @@ import jakarta.persistence.EntityManagerFactory;
  * S3 (36.82, 127.22) 매핑 없음 → 검색 제외
  * S4 (36.80, 127.20) → RA1, 삭제됨 → 검색·상세 제외
  * S5 (37.50, 127.00) → IC1, 영역 밖
+ * 운영기관은 모두 ME(환경부)
  * </pre>
  */
 @SpringBootTest(properties = "spring.jpa.properties.hibernate.generate_statistics=true")
@@ -113,6 +116,44 @@ class StationQueryControllerTest {
         assertThat(stats.getPrepareStatementCount()).isEqualTo(2);
     }
 
+    // ---- 운영기관 목록 (FR-34) ----
+
+    @Test
+    void 운영기관_목록은_서비스_대상_충전소만_충전소_수가_많은_순으로_센다() throws Exception {
+        // 서비스 대상: S1·S5(ME), S2(ST). 매핑 없는 S3(CV)과 삭제된 S4는 세지 않는다
+        operator("ST000002", "ST", "SK일렉링크");
+        operator("ST000003", "CV", "채비");
+        Statistics stats = statistics();
+        mvc.perform(get("/api/operators"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.operators[*].busiId", contains("ME", "ST")))
+                .andExpect(jsonPath("$.operators[0].name").value("환경부"))
+                .andExpect(jsonPath("$.operators[0].stationCount").value(2))
+                .andExpect(jsonPath("$.operators[1].name").value("SK일렉링크"))
+                .andExpect(jsonPath("$.operators[1].stationCount").value(1));
+        assertThat(stats.getPrepareStatementCount()).isEqualTo(1);
+    }
+
+    @Test
+    void 운영기관별_충전소_수의_합은_서비스_대상_충전소_수와_같다() throws Exception {
+        // TC-34. 서비스 대상 = 삭제되지 않고 접근지점 매핑이 있는 충전소 (S1, S2, S5)
+        operator("ST000002", "ST", "SK일렉링크");
+        long serviceStations = id("""
+                SELECT count(*) FROM station s
+                WHERE s.del_yn = 'N' AND EXISTS (SELECT 1 FROM station_access sa WHERE sa.station_id = s.station_id)""");
+        String body = mvc.perform(get("/api/operators")).andReturn().getResponse().getContentAsString();
+        List<Integer> counts = JsonPath.read(body, "$.operators[*].stationCount");
+        assertThat(counts.stream().mapToLong(Integer::longValue).sum()).isEqualTo(serviceStations).isEqualTo(3);
+    }
+
+    @Test
+    void 기관명이_없으면_코드를_이름으로_쓴다() throws Exception {
+        jdbc.update("UPDATE station SET org_name = NULL");
+        mvc.perform(get("/api/operators"))
+                .andExpect(jsonPath("$.operators[0].busiId").value("ME"))
+                .andExpect(jsonPath("$.operators[0].name").value("ME"));
+    }
+
     // ---- 6.2 검색 ----
 
     @Test
@@ -123,6 +164,7 @@ class StationQueryControllerTest {
                 .andExpect(jsonPath("$.count").value(2))
                 .andExpect(jsonPath("$.truncated").value(false))
                 .andExpect(jsonPath("$.stations[*].statId", contains("ST000001", "ST000002")))
+                .andExpect(jsonPath("$.stations[0].busiId").value("ME"))
                 .andExpect(jsonPath("$.stations[0].fastChargerCount").value(5))
                 .andExpect(jsonPath("$.stations[0].availableCount").value(1))
                 .andExpect(jsonPath("$.stations[0].chargingCount").value(1))
@@ -194,6 +236,15 @@ class StationQueryControllerTest {
     }
 
     @Test
+    void 운영기관이_달라도_검색에서_빠지지_않고_busiId로_구분된다() throws Exception {
+        // FR-36: 선호 운영기관은 화면에서 강조만 한다. 서버 검색은 기관으로 거르지 않는다
+        operator("ST000002", "ST", "SK일렉링크");
+        mvc.perform(area(get("/api/stations")))
+                .andExpect(jsonPath("$.stations[*].statId", contains("ST000001", "ST000002")))
+                .andExpect(jsonPath("$.stations[*].busiId", contains("ME", "ST")));
+    }
+
+    @Test
     void 결과가_없으면_빈_목록으로_200() throws Exception {
         mvc.perform(get("/api/stations").param("routeId", String.valueOf(routeA)).param("accessType", "IC"))
                 .andExpect(status().isOk())
@@ -231,6 +282,8 @@ class StationQueryControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.statId").value("ST000001"))
                 .andExpect(jsonPath("$.address").value("테스트 주소"))
+                .andExpect(jsonPath("$.busiId").value("ME"))
+                .andExpect(jsonPath("$.orgName").value("환경부"))
                 .andExpect(jsonPath("$.accesses.length()").value(1))
                 .andExpect(jsonPath("$.accesses[0].restAreaId").value(ra1))
                 // 삭제된 충전기(07)는 빠진다
@@ -316,6 +369,7 @@ class StationQueryControllerTest {
     void OpenAPI_문서에_조회_API가_나온다() throws Exception {
         mvc.perform(get("/v3/api-docs"))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.paths['/api/operators'].get").exists())
                 .andExpect(jsonPath("$.paths['/api/stations'].get").exists())
                 .andExpect(jsonPath("$.paths['/api/stations/{stationId}'].get").exists())
                 .andExpect(jsonPath("$.paths['/api/chargers/{chargerId}/history'].get").exists());
@@ -352,8 +406,9 @@ class StationQueryControllerTest {
 
     private long station(String statId, double lat, double lng, boolean deleted) {
         return id("""
-                INSERT INTO station (stat_id, name, address, latitude, longitude, zcode, busi_id, del_yn, updated_at)
-                VALUES (?, '테스트 충전소', '테스트 주소', ?, ?, '44', 'ME', ?, now())
+                INSERT INTO station (stat_id, name, address, latitude, longitude, zcode, busi_id, org_name, del_yn,
+                                     updated_at)
+                VALUES (?, '테스트 충전소', '테스트 주소', ?, ?, '44', 'ME', '환경부', ?, now())
                 RETURNING station_id""", statId, lat, lng, deleted ? "Y" : "N");
     }
 
@@ -364,6 +419,10 @@ class StationQueryControllerTest {
                                      current_status_code, current_normalized_status, current_status_updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING charger_id""",
                 stationId, chgerId, type, fast, deleted ? "Y" : "N", statusCode, normalized, updatedAt);
+    }
+
+    private void operator(String statId, String busiId, String orgName) {
+        jdbc.update("UPDATE station SET busi_id = ?, org_name = ? WHERE stat_id = ?", busiId, orgName, statId);
     }
 
     private void mapRestArea(long stationId, long restAreaId) {

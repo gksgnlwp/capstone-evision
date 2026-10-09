@@ -107,6 +107,26 @@ public class StationQueryRepository {
                 .fetch();
     }
 
+    public record OperatorRow(String busiId, String orgName, Long stations) {
+    }
+
+    /**
+     * FR-34 서비스 대상(접근지점 매핑 있음, 삭제 제외) 충전소의 운영기관별 충전소 수.
+     * 원천 기관명(bnm)은 코드마다 하나라 max로 고른다.
+     */
+    public List<OperatorRow> countStationsByOperator() {
+        return query.select(Projections.constructor(OperatorRow.class,
+                        station.busiId, station.orgName.max(), station.id.count()))
+                .from(station)
+                .where(station.deleted.isFalse(),
+                        JPAExpressions.selectOne()
+                                .from(stationAccess)
+                                .where(stationAccess.station.eq(station))
+                                .exists())
+                .groupBy(station.busiId)
+                .fetch();
+    }
+
     public record StatusCountRow(Long stationId, NormalizedStatus status, Long count, LocalDateTime latestUpdatedAt) {
     }
 

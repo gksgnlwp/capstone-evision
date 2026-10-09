@@ -88,6 +88,17 @@ public class StationQueryService {
         }
     }
 
+    /** FR-34 운영기관 목록. 충전소 수가 많은 순, 같으면 코드 순. 쿼리 1회. */
+    public OperatorListResponse operators() {
+        List<OperatorListResponse.OperatorItem> operators = repository.countStationsByOperator().stream()
+                .map(r -> new OperatorListResponse.OperatorItem(r.busiId(),
+                        r.orgName() == null ? r.busiId() : r.orgName(), r.stations()))
+                .sorted(Comparator.comparingLong(OperatorListResponse.OperatorItem::stationCount).reversed()
+                        .thenComparing(OperatorListResponse.OperatorItem::busiId))
+                .toList();
+        return new OperatorListResponse(operators);
+    }
+
     /** OP-01 충전소 검색. 쿼리 수는 결과 건수와 관계없이 3회 (충전소, 접근지점, 상태 집계). */
     public StationSearchResponse search(StationSearchCondition c) {
         List<Station> found = repository.searchStations(c, c.limit() + 1);
@@ -121,9 +132,9 @@ public class StationQueryService {
         List<StationDetailResponse.ChargerView> chargers = repository.findActiveChargers(stationId).stream()
                 .map(StationDetailResponse.ChargerView::from).toList();
         return new StationDetailResponse(s.getId(), s.getStatId(), s.getName(), s.getAddress(),
-                s.getAddressDetail(), s.getLatitude(), s.getLongitude(), s.getOrgName(), s.getOperatorName(),
-                s.getOperatorCall(), s.getUseTime(), s.getParkingFree(), s.getLimited(), s.getLimitDetail(),
-                s.getUpdatedAt(), accesses, chargers);
+                s.getAddressDetail(), s.getLatitude(), s.getLongitude(), s.getBusiId(), s.getOrgName(),
+                s.getOperatorName(), s.getOperatorCall(), s.getUseTime(), s.getParkingFree(), s.getLimited(),
+                s.getLimitDetail(), s.getUpdatedAt(), accesses, chargers);
     }
 
     /** OP-19 충전기 상태 이력. offset 없이 keyset(cursor = 마지막 status_updated_at)으로 넘긴다. */
@@ -176,8 +187,8 @@ public class StationQueryService {
                 latest = r.latestUpdatedAt();
             }
         }
-        return new StationSummary(s.getId(), s.getStatId(), s.getName(), s.getLatitude(), s.getLongitude(),
-                accesses, available + charging + unavailable + unknown, available, charging, unavailable, unknown,
-                latest);
+        return new StationSummary(s.getId(), s.getStatId(), s.getName(), s.getBusiId(), s.getLatitude(),
+                s.getLongitude(), accesses, available + charging + unavailable + unknown, available, charging,
+                unavailable, unknown, latest);
     }
 }

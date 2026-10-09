@@ -38,6 +38,15 @@ public class StationQueryController {
         return service.routes();
     }
 
+    /** FR-34 운영기관 목록 (OP-107) */
+    @GetMapping("/operators")
+    @Operation(summary = "운영기관 목록",
+            description = "서비스 대상 충전소의 운영기관을 충전소 수가 많은 순으로 준다. busiId는 검색·상세 응답의 busiId와 같다. "
+                    + "선호 운영기관은 화면이 브라우저에 저장하고, 검색에서 다른 기관을 빼지 않고 강조만 한다(FR-35·36).")
+    public OperatorListResponse operators() {
+        return service.operators();
+    }
+
     /** OP-01 충전소 검색 */
     @GetMapping("/stations")
     @Operation(summary = "충전소 검색",
