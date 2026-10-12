@@ -8,6 +8,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.LongStream;
 
 import org.hibernate.SessionFactory;
 import org.hibernate.stat.Statistics;
@@ -292,6 +294,47 @@ class StationQueryControllerTest {
         expectInvalid(area(get("/api/stations")).param("accessType", "HIGHWAY"));
     }
 
+    // ---- 즐겨찾기 요약 (FR-37, OP-108) ----
+
+    @Test
+    void 즐겨찾기_요약은_요청_순서대로_상태와_함께_쿼리_3회로_준다() throws Exception {
+        // S2, S1(중복), 운영 종료된 S4, 없는 ID → 중복은 한 번만, 순서는 요청대로
+        Statistics stats = statistics();
+        mvc.perform(get("/api/stations/summaries").param("ids", s2 + "," + s1 + "," + s4 + ",999999," + s1))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[*].stationId", contains((int) s2, (int) s1, (int) s4, 999999)))
+                .andExpect(jsonPath("$.items[*].status", contains("ACTIVE", "ACTIVE", "CLOSED", "NOT_FOUND")))
+                .andExpect(jsonPath("$.items[0].station.accesses.length()").value(2))
+                .andExpect(jsonPath("$.items[1].station.statId").value("ST000001"))
+                .andExpect(jsonPath("$.items[1].station.busiId").value("ME"))
+                .andExpect(jsonPath("$.items[1].station.fastChargerCount").value(5))
+                .andExpect(jsonPath("$.items[1].station.availableCount").value(1))
+                .andExpect(jsonPath("$.items[2].station.statId").value("ST000004"))
+                .andExpect(jsonPath("$.items[3].station").doesNotExist());
+        assertThat(stats.getPrepareStatementCount()).isEqualTo(3);
+    }
+
+    @Test
+    void 없는_ID만_있으면_NOT_FOUND만_주고_추가_조회를_하지_않는다() throws Exception {
+        Statistics stats = statistics();
+        mvc.perform(get("/api/stations/summaries").param("ids", "999998,999999"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[*].status", contains("NOT_FOUND", "NOT_FOUND")));
+        assertThat(stats.getPrepareStatementCount()).isEqualTo(1);
+    }
+
+    @Test
+    void 즐겨찾기_요약은_최대_20개() throws Exception {
+        String twenty = LongStream.rangeClosed(1, 20).mapToObj(String::valueOf).collect(Collectors.joining(","));
+        mvc.perform(get("/api/stations/summaries").param("ids", twenty))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(20));
+        expectInvalid(get("/api/stations/summaries").param("ids", twenty + ",21"));
+        expectInvalid(get("/api/stations/summaries").param("ids", ""));
+        expectInvalid(get("/api/stations/summaries"));
+        expectInvalid(get("/api/stations/summaries").param("ids", "1,abc"));
+    }
+
     // ---- 6.3 상세 ----
 
     @Test
@@ -389,6 +432,7 @@ class StationQueryControllerTest {
         mvc.perform(get("/v3/api-docs"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.paths['/api/operators'].get").exists())
+                .andExpect(jsonPath("$.paths['/api/stations/summaries'].get").exists())
                 .andExpect(jsonPath("$.paths['/api/stations'].get").exists())
                 .andExpect(jsonPath("$.paths['/api/stations/{stationId}'].get").exists())
                 .andExpect(jsonPath("$.paths['/api/chargers/{chargerId}/history'].get").exists());

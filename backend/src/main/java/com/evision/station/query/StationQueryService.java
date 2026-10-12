@@ -2,6 +2,7 @@ package com.evision.station.query;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -30,6 +31,7 @@ public class StationQueryService {
     static final Duration MAX_HISTORY_RANGE = Duration.ofDays(7);
     static final int DEFAULT_HISTORY_SIZE = 100;
     static final int MAX_HISTORY_SIZE = 500;
+    static final int MAX_SUMMARY_IDS = 20;
 
     private final StationQueryRepository repository;
     private final ChargerStatusCodes statusCodes;
@@ -121,6 +123,48 @@ public class StationQueryService {
                         counts.getOrDefault(s.getId(), List.of())))
                 .toList();
         return new StationSearchResponse(summaries.size(), c.limit(), truncated, summaries);
+    }
+
+    /**
+     * FR-37 즐겨찾기 충전소 요약 (OP-108). 요청 순서대로, 중복 ID는 한 번만. 쿼리 3회 (충전소, 접근지점, 상태 집계).
+     * 운영 종료된 충전소는 빼지 않고 CLOSED로 알려 화면이 삭제를 안내하게 한다.
+     */
+    public StationSummaryListResponse summaries(List<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            throw ApiException.invalidQuery("ids를 1개 이상 지정해야 합니다.");
+        }
+        List<Long> unique = ids.stream().distinct().toList();
+        if (unique.size() > MAX_SUMMARY_IDS) {
+            throw ApiException.invalidQuery("ids는 최대 " + MAX_SUMMARY_IDS + "개입니다.");
+        }
+
+        Map<Long, Station> found = repository.findStationsIncludingDeleted(unique).stream()
+                .collect(Collectors.toMap(Station::getId, s -> s));
+        Map<Long, List<AccessPointView>> accesses = Map.of();
+        Map<Long, List<StatusCountRow>> counts = Map.of();
+        if (!found.isEmpty()) {
+            accesses = repository.findAccesses(found.keySet(), null, null, null).stream()
+                    .collect(Collectors.groupingBy(a -> a.getStation().getId(),
+                            Collectors.mapping(AccessPointView::from, Collectors.toList())));
+            counts = repository.countFastChargersByStatus(found.keySet()).stream()
+                    .collect(Collectors.groupingBy(StatusCountRow::stationId));
+        }
+
+        List<StationSummaryListResponse.Item> items = new ArrayList<>();
+        for (Long id : unique) {
+            Station s = found.get(id);
+            if (s == null) {
+                items.add(new StationSummaryListResponse.Item(id, StationSummaryListResponse.ItemStatus.NOT_FOUND,
+                        null));
+                continue;
+            }
+            StationSummaryListResponse.ItemStatus status = s.isDeleted()
+                    ? StationSummaryListResponse.ItemStatus.CLOSED
+                    : StationSummaryListResponse.ItemStatus.ACTIVE;
+            items.add(new StationSummaryListResponse.Item(id, status,
+                    summarize(s, accesses.getOrDefault(id, List.of()), counts.getOrDefault(id, List.of()))));
+        }
+        return new StationSummaryListResponse(items);
     }
 
     /** OP-02 충전소 상세 (UC-02·03). 쿼리 3회 (충전소, 접근지점, 충전기). */

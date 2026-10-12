@@ -143,6 +143,13 @@ public class StationQueryRepository {
                 .fetch();
     }
 
+    /** FR-37 즐겨찾기 요약용. 운영 종료(삭제)된 충전소도 종료 표시를 위해 함께 가져온다. */
+    public List<Station> findStationsIncludingDeleted(Collection<Long> stationIds) {
+        return query.selectFrom(station)
+                .where(station.id.in(stationIds))
+                .fetch();
+    }
+
     public Optional<Station> findActiveStation(long stationId) {
         return Optional.ofNullable(query.selectFrom(station)
                 .where(station.id.eq(stationId), station.deleted.isFalse())
