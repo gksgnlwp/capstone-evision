@@ -1,6 +1,7 @@
 package com.evision.station.query;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -67,6 +68,17 @@ public class StationQueryController {
             @RequestParam(required = false) Integer limit) {
         return service.search(StationSearchCondition.of(minLat, minLng, maxLat, maxLng, routeId, direction,
                 accessType, chargerType, limit));
+    }
+
+    /** FR-37 즐겨찾기 충전소 요약 (OP-108) */
+    @GetMapping("/stations/summaries")
+    @Operation(summary = "즐겨찾기 충전소 요약",
+            description = "충전소 ID 최대 20개의 요약과 급속 기준 현재 상태를 한 번에 준다. 요청 순서대로, 중복은 한 번만. "
+                    + "운영 종료된 충전소는 status=CLOSED(삭제 안내용), 없는 ID는 NOT_FOUND. 0개이거나 20개를 넘으면 INVALID_QUERY.")
+    public StationSummaryListResponse summaries(
+            @Parameter(description = "충전소 ID 목록 (쉼표 구분, 예: 12,34,56)")
+            @RequestParam List<Long> ids) {
+        return service.summaries(ids);
     }
 
     /** OP-02 충전소 상세 (UC-02·03) */
