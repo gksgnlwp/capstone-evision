@@ -30,6 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
  *   <li>interchange.csv: 고속도로 출입시설 위치정보 (15112762). 노선코드 = 노선번호 × 10 + 구간번호</li>
  *   <li>station_access.csv: 사람이 검증한 충전소-접근지점 매핑. 이 파일이 MANUAL 매핑의 기준이다</li>
  * </ul>
+ * 휴게소 매핑을 적재한 뒤 IC 인근 충전소 자동 매핑(AUTO)을 다시 만든다 ({@link IcAutoMapper}).
  */
 @Component
 public class ReferenceDataLoader {
@@ -59,26 +60,30 @@ public class ReferenceDataLoader {
     private final JdbcTemplate jdbc;
     private final ResourceLoader resourceLoader;
     private final ReferenceProperties properties;
+    private final IcAutoMapper icAutoMapper;
 
-    public ReferenceDataLoader(JdbcTemplate jdbc, ResourceLoader resourceLoader, ReferenceProperties properties) {
+    public ReferenceDataLoader(JdbcTemplate jdbc, ResourceLoader resourceLoader, ReferenceProperties properties,
+            IcAutoMapper icAutoMapper) {
         this.jdbc = jdbc;
         this.resourceLoader = resourceLoader;
         this.properties = properties;
+        this.icAutoMapper = icAutoMapper;
     }
 
     public record LoadReport(int routes, int restAreas, int restAreasSkipped, int interchanges,
-            int interchangesSkipped, int accessUpserted, int accessRemoved) {
+            int interchangesSkipped, int accessUpserted, int accessRemoved, int icAutoMapped, int icAutoRemoved) {
     }
 
-    /** 설정된 위치의 CSV 네 개를 한 트랜잭션으로 적재한다. 매핑 파일에 오류가 하나라도 있으면 전체를 롤백한다. */
+    /** 설정된 위치의 CSV 네 개와 IC 자동 매핑을 한 트랜잭션으로 적재한다. 매핑 파일에 오류가 하나라도 있으면 전체를 롤백한다. */
     @Transactional
     public LoadReport loadAll() {
         int routes = loadRoutes(readCsv("route.csv"));
         int[] restAreas = loadRestAreas(readCsv("rest_area.csv"));
         int[] interchanges = loadInterchanges(readCsv("interchange.csv"));
         int[] access = loadStationAccess(readCsv("station_access.csv"));
+        IcAutoMapper.Result ic = icAutoMapper.rebuild();
         LoadReport report = new LoadReport(routes, restAreas[0], restAreas[1], interchanges[0], interchanges[1],
-                access[0], access[1]);
+                access[0], access[1], ic.mapped(), ic.removed());
         log.info("기준 데이터 적재 완료: {}", report);
         return report;
     }

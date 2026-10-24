@@ -8,6 +8,8 @@ import com.evision.station.domain.Charger;
 
 /**
  * 충전소 상세 응답 (명세 6.3).
+ *
+ * @param busiId 운영기관 코드 (운영기관 목록의 busiId와 같음)
  */
 public record StationDetailResponse(
         long stationId,
@@ -17,6 +19,7 @@ public record StationDetailResponse(
         String addressDetail,
         double lat,
         double lng,
+        String busiId,
         String orgName,
         String operatorName,
         String operatorCall,

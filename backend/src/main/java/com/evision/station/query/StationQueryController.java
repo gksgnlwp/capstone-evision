@@ -1,6 +1,7 @@
 package com.evision.station.query;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -20,7 +21,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
  */
 @RestController
 @RequestMapping("/api")
-@Tag(name = "조회", description = "충전소 검색·상세, 충전기 상태 이력")
+@Tag(name = "조회", description = "노선 목록, 충전소 검색·상세, 충전기 상태 이력")
 public class StationQueryController {
 
     private final StationQueryService service;
@@ -29,10 +30,28 @@ public class StationQueryController {
         this.service = service;
     }
 
+    /** FR-06 노선 목록 */
+    @GetMapping("/routes")
+    @Operation(summary = "노선 목록",
+            description = "충전소가 매핑된 고속도로 노선만 노선번호 순으로 준다. directions는 검색의 direction 값으로 그대로 쓴다. "
+                    + "restAreaStations·icStations는 휴게소·IC에 매핑된 충전소 수(같은 충전소가 둘 다면 양쪽에 센다).")
+    public RouteListResponse routes() {
+        return service.routes();
+    }
+
+    /** FR-34 운영기관 목록 (OP-107) */
+    @GetMapping("/operators")
+    @Operation(summary = "운영기관 목록",
+            description = "서비스 대상 충전소의 운영기관을 충전소 수가 많은 순으로 준다. busiId는 검색·상세 응답의 busiId와 같다. "
+                    + "선호 운영기관은 화면이 브라우저에 저장하고, 검색에서 다른 기관을 빼지 않고 강조만 한다(FR-35·36).")
+    public OperatorListResponse operators() {
+        return service.operators();
+    }
+
     /** OP-01 충전소 검색 */
     @GetMapping("/stations")
     @Operation(summary = "충전소 검색",
-            description = "지도 영역(4개 값 모두) 또는 routeId 중 하나는 필수. 접근지점(휴게소·IC)이 매핑된 충전소만 나온다. "
+            description = "지도 영역(4개 값 모두) 또는 routeId 중 하나는 필수. 접근지점(휴게소·IC)이 매핑되고 급속 충전기가 있는 충전소만 나온다. "
                     + "상태 대수는 급속 충전기 기준이며, 0건이면 빈 목록으로 200을 준다.")
     public StationSearchResponse search(
             @RequestParam(required = false) Double minLat,
@@ -40,7 +59,7 @@ public class StationQueryController {
             @RequestParam(required = false) Double maxLat,
             @RequestParam(required = false) Double maxLng,
             @RequestParam(required = false) Long routeId,
-            @Parameter(description = "휴게소 방향 (원천 값 그대로, 예: 상행). routeId와 함께만 쓸 수 있고 지정하면 IC는 제외된다.")
+            @Parameter(description = "휴게소 방향 (원천 값 그대로, 예: 상행). routeId와 함께만 쓸 수 있다. IC는 방향 구분이 없어 같은 노선의 IC는 그대로 나온다(IC를 빼려면 accessType=REST_AREA).")
             @RequestParam(required = false) String direction,
             @RequestParam(required = false) AccessType accessType,
             @Parameter(description = "충전기 타입 코드 (원천 코드 그대로, 예: 04)")
@@ -49,6 +68,17 @@ public class StationQueryController {
             @RequestParam(required = false) Integer limit) {
         return service.search(StationSearchCondition.of(minLat, minLng, maxLat, maxLng, routeId, direction,
                 accessType, chargerType, limit));
+    }
+
+    /** FR-37 즐겨찾기 충전소 요약 (OP-108) */
+    @GetMapping("/stations/summaries")
+    @Operation(summary = "즐겨찾기 충전소 요약",
+            description = "충전소 ID 최대 20개의 요약과 급속 기준 현재 상태를 한 번에 준다. 요청 순서대로, 중복은 한 번만. "
+                    + "운영 종료된 충전소는 status=CLOSED(삭제 안내용), 없는 ID는 NOT_FOUND. 0개이거나 20개를 넘으면 INVALID_QUERY.")
+    public StationSummaryListResponse summaries(
+            @Parameter(description = "충전소 ID 목록 (쉼표 구분, 예: 12,34,56)")
+            @RequestParam List<Long> ids) {
+        return service.summaries(ids);
     }
 
     /** OP-02 충전소 상세 (UC-02·03) */

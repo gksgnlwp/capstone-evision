@@ -2,8 +2,12 @@ package com.evision.station.query;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
@@ -27,6 +31,7 @@ public class StationQueryService {
     static final Duration MAX_HISTORY_RANGE = Duration.ofDays(7);
     static final int DEFAULT_HISTORY_SIZE = 100;
     static final int MAX_HISTORY_SIZE = 500;
+    static final int MAX_SUMMARY_IDS = 20;
 
     private final StationQueryRepository repository;
     private final ChargerStatusCodes statusCodes;
@@ -34,6 +39,66 @@ public class StationQueryService {
     public StationQueryService(StationQueryRepository repository, ChargerStatusCodes statusCodes) {
         this.repository = repository;
         this.statusCodes = statusCodes;
+    }
+
+    /** FR-06 노선 목록. 충전소가 매핑된 노선만, 노선번호 순. 쿼리 2회. */
+    public RouteListResponse routes() {
+        Map<Long, RouteBuilder> byRoute = new HashMap<>();
+        for (StationQueryRepository.RouteDirectionRow r : repository.countRestAreaStationsByRoute()) {
+            RouteBuilder b = byRoute.computeIfAbsent(r.routeId(), id -> new RouteBuilder(id, r.routeNo(), r.routeName()));
+            b.directions.add(r.direction());
+            b.restAreaStations += r.stations();
+        }
+        for (StationQueryRepository.RouteIcRow r : repository.countIcStationsByRoute()) {
+            byRoute.computeIfAbsent(r.routeId(), id -> new RouteBuilder(id, r.routeNo(), r.routeName()))
+                    .icStations += r.stations();
+        }
+        List<RouteListResponse.RouteItem> routes = byRoute.values().stream()
+                .sorted(Comparator.comparingInt((RouteBuilder b) -> routeNoOrder(b.routeNo))
+                        .thenComparing(b -> b.routeNo))
+                .map(RouteBuilder::build)
+                .toList();
+        return new RouteListResponse(routes);
+    }
+
+    /** 노선번호는 문자열이라 숫자로 비교한다 (1, 10, 15, 100 …). 숫자가 아니면 뒤로 보낸다. */
+    private static int routeNoOrder(String routeNo) {
+        try {
+            return Integer.parseInt(routeNo);
+        } catch (NumberFormatException e) {
+            return Integer.MAX_VALUE;
+        }
+    }
+
+    private static final class RouteBuilder {
+        final long routeId;
+        final String routeNo;
+        final String routeName;
+        final TreeSet<String> directions = new TreeSet<>();
+        long restAreaStations;
+        long icStations;
+
+        RouteBuilder(long routeId, String routeNo, String routeName) {
+            this.routeId = routeId;
+            this.routeNo = routeNo;
+            this.routeName = routeName;
+        }
+
+        RouteListResponse.RouteItem build() {
+            return new RouteListResponse.RouteItem(routeId, routeNo, routeName, List.copyOf(directions),
+                    restAreaStations, icStations);
+        }
+    }
+
+    /** FR-34 운영기관 목록. 충전소 수가 많은 순, 같으면 코드 순. 쿼리 1회. */
+    public OperatorListResponse operators() {
+        List<OperatorListResponse.OperatorItem> operators = repository.countStationsByOperator().stream()
+                .map(r -> new OperatorListResponse.OperatorItem(r.busiId(),
+                        r.orgName() == null ? r.busiId() : r.orgName(), r.stations()))
+                .sorted(Comparator.comparingLong(OperatorListResponse.OperatorItem::stationCount).reversed()
+                        .thenComparing(OperatorListResponse.OperatorItem::busiId))
+                .toList();
+        return new OperatorListResponse(operators);
     }
 
     /** OP-01 충전소 검색. 쿼리 수는 결과 건수와 관계없이 3회 (충전소, 접근지점, 상태 집계). */
@@ -60,6 +125,48 @@ public class StationQueryService {
         return new StationSearchResponse(summaries.size(), c.limit(), truncated, summaries);
     }
 
+    /**
+     * FR-37 즐겨찾기 충전소 요약 (OP-108). 요청 순서대로, 중복 ID는 한 번만. 쿼리 3회 (충전소, 접근지점, 상태 집계).
+     * 운영 종료된 충전소는 빼지 않고 CLOSED로 알려 화면이 삭제를 안내하게 한다.
+     */
+    public StationSummaryListResponse summaries(List<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            throw ApiException.invalidQuery("ids를 1개 이상 지정해야 합니다.");
+        }
+        List<Long> unique = ids.stream().distinct().toList();
+        if (unique.size() > MAX_SUMMARY_IDS) {
+            throw ApiException.invalidQuery("ids는 최대 " + MAX_SUMMARY_IDS + "개입니다.");
+        }
+
+        Map<Long, Station> found = repository.findStationsIncludingDeleted(unique).stream()
+                .collect(Collectors.toMap(Station::getId, s -> s));
+        Map<Long, List<AccessPointView>> accesses = Map.of();
+        Map<Long, List<StatusCountRow>> counts = Map.of();
+        if (!found.isEmpty()) {
+            accesses = repository.findAccesses(found.keySet(), null, null, null).stream()
+                    .collect(Collectors.groupingBy(a -> a.getStation().getId(),
+                            Collectors.mapping(AccessPointView::from, Collectors.toList())));
+            counts = repository.countFastChargersByStatus(found.keySet()).stream()
+                    .collect(Collectors.groupingBy(StatusCountRow::stationId));
+        }
+
+        List<StationSummaryListResponse.Item> items = new ArrayList<>();
+        for (Long id : unique) {
+            Station s = found.get(id);
+            if (s == null) {
+                items.add(new StationSummaryListResponse.Item(id, StationSummaryListResponse.ItemStatus.NOT_FOUND,
+                        null));
+                continue;
+            }
+            StationSummaryListResponse.ItemStatus status = s.isDeleted()
+                    ? StationSummaryListResponse.ItemStatus.CLOSED
+                    : StationSummaryListResponse.ItemStatus.ACTIVE;
+            items.add(new StationSummaryListResponse.Item(id, status,
+                    summarize(s, accesses.getOrDefault(id, List.of()), counts.getOrDefault(id, List.of()))));
+        }
+        return new StationSummaryListResponse(items);
+    }
+
     /** OP-02 충전소 상세 (UC-02·03). 쿼리 3회 (충전소, 접근지점, 충전기). */
     public StationDetailResponse detail(long stationId) {
         Station s = repository.findActiveStation(stationId)
@@ -69,9 +176,9 @@ public class StationQueryService {
         List<StationDetailResponse.ChargerView> chargers = repository.findActiveChargers(stationId).stream()
                 .map(StationDetailResponse.ChargerView::from).toList();
         return new StationDetailResponse(s.getId(), s.getStatId(), s.getName(), s.getAddress(),
-                s.getAddressDetail(), s.getLatitude(), s.getLongitude(), s.getOrgName(), s.getOperatorName(),
-                s.getOperatorCall(), s.getUseTime(), s.getParkingFree(), s.getLimited(), s.getLimitDetail(),
-                s.getUpdatedAt(), accesses, chargers);
+                s.getAddressDetail(), s.getLatitude(), s.getLongitude(), s.getBusiId(), s.getOrgName(),
+                s.getOperatorName(), s.getOperatorCall(), s.getUseTime(), s.getParkingFree(), s.getLimited(),
+                s.getLimitDetail(), s.getUpdatedAt(), accesses, chargers);
     }
 
     /** OP-19 충전기 상태 이력. offset 없이 keyset(cursor = 마지막 status_updated_at)으로 넘긴다. */
@@ -124,8 +231,8 @@ public class StationQueryService {
                 latest = r.latestUpdatedAt();
             }
         }
-        return new StationSummary(s.getId(), s.getStatId(), s.getName(), s.getLatitude(), s.getLongitude(),
-                accesses, available + charging + unavailable + unknown, available, charging, unavailable, unknown,
-                latest);
+        return new StationSummary(s.getId(), s.getStatId(), s.getName(), s.getBusiId(), s.getLatitude(),
+                s.getLongitude(), accesses, available + charging + unavailable + unknown, available, charging,
+                unavailable, unknown, latest);
     }
 }

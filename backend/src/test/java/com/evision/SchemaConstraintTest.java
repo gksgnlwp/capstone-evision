@@ -15,7 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.evision.support.TestDb;
 
 /**
- * V1·V2 마이그레이션의 초기 데이터와 station_access CHECK 제약을 검증한다.
+ * V1~V3 마이그레이션의 초기 데이터와 station_access CHECK·부분 유일 제약을 검증한다.
  */
 @SpringBootTest
 @Import(TestcontainersConfiguration.class)
@@ -83,5 +83,45 @@ class SchemaConstraintTest {
                 INSERT INTO station_access (station_id, access_type, ic_id, mapping_method)
                 VALUES (?, 'REST_AREA', ?, 'MANUAL')""", stationId, icId))
                 .isInstanceOf(DataIntegrityViolationException.class);
+    }
+    @Test
+    void 같은_휴게소_매핑은_두_번_들어가지_않는다() {
+        String sql = """
+                INSERT INTO station_access (station_id, access_type, rest_area_id, mapping_method)
+                VALUES (?, 'REST_AREA', ?, 'MANUAL')""";
+        jdbc.update(sql, stationId, restAreaId);
+
+        assertThatThrownBy(() -> jdbc.update(sql, stationId, restAreaId))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void 같은_IC_매핑은_두_번_들어가지_않는다() {
+        String sql = """
+                INSERT INTO station_access (station_id, access_type, ic_id, detour_km, mapping_method)
+                VALUES (?, 'IC', ?, 1.2, 'AUTO')""";
+        jdbc.update(sql, stationId, icId);
+
+        assertThatThrownBy(() -> jdbc.update(sql, stationId, icId))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    void 한_충전소가_휴게소와_여러_IC에_함께_매핑될_수_있다() {
+        long routeId = jdbc.queryForObject("SELECT route_id FROM route LIMIT 1", Long.class);
+        long otherIc = jdbc.queryForObject("""
+                INSERT INTO interchange (route_id, facility_code, name, facility_type, latitude, longitude)
+                VALUES (?, 'IC002', '북천안IC', 'IC', 36.9, 127.1) RETURNING ic_id""", Long.class, routeId);
+        jdbc.update("""
+                INSERT INTO station_access (station_id, access_type, rest_area_id, mapping_method)
+                VALUES (?, 'REST_AREA', ?, 'MANUAL')""", stationId, restAreaId);
+        jdbc.update("""
+                INSERT INTO station_access (station_id, access_type, ic_id, detour_km, mapping_method)
+                VALUES (?, 'IC', ?, 1.2, 'AUTO')""", stationId, icId);
+        jdbc.update("""
+                INSERT INTO station_access (station_id, access_type, ic_id, detour_km, mapping_method)
+                VALUES (?, 'IC', ?, 3.0, 'AUTO')""", stationId, otherIc);
+
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM station_access", Integer.class)).isEqualTo(3);
     }
 }

@@ -40,6 +40,8 @@ services:
       EVISION_REFERENCE_LOAD_ON_STARTUP: ${EVISION_REFERENCE_LOAD_ON_STARTUP:-true}
       # 기동 시 최근 N일 30분 구간 재집계 (멱등)
       EVISION_AGGREGATION_BACKFILL_DAYS: ${EVISION_AGGREGATION_BACKFILL_DAYS:-2}
+      # 브라우저 호출을 허용할 프론트 출처 (쉼표 구분). .env에 없으면 로컬 개발 서버만 허용
+      EVISION_CORS_ALLOWED_ORIGINS: ${EVISION_CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:3000}
     ports:
       - "8080:8080"
     logging:

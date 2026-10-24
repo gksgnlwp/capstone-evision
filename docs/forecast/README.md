@@ -5,7 +5,7 @@
 | 상태 | **초안: 합의 필요** (아래 "합의할 것" 참고) |
 | 예측 모델 | 박상현 |
 | 추천 API | 한휘제 |
-| 관련 코드 | `V3__occupancy_forecast.sql`, `forecast/domain/OccupancyForecast`, `recommend/RecommendService` |
+| 관련 코드 | `V4__occupancy_forecast.sql`, `forecast/domain/OccupancyForecast`, `recommend/RecommendService` |
 
 ## 1. 한 줄 요약
 

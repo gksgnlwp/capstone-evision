@@ -43,7 +43,7 @@ public class RecommendRepository {
 
     /**
      * 충전소별 도착 슬롯을 기준으로 과거 구간을 (요일, 도착 슬롯과 같은지) 단위로 센다.
-     * 커버링 인덱스 (station_id, window_start) INCLUDE (available) 로 Index Only Scan 한다 (V4).
+     * 커버링 인덱스 (station_id, window_start) INCLUDE (available) 로 Index Only Scan 한다 (V5).
      * 결과는 충전소당 최대 14행 (요일 7 × 슬롯 일치 여부 2).
      */
     static final String HISTORY_COUNTS = """
