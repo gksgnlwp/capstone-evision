@@ -35,6 +35,9 @@ public class StationQueryRepository {
     private static final QRoute restAreaRoute = new QRoute("restAreaRoute");
     private static final QRoute icRoute = new QRoute("icRoute");
 
+    /** 양방향 휴게소의 rest_area.direction 원천 값 */
+    static final String BOTH_DIRECTIONS = "양방향";
+
     private final JPAQueryFactory query;
 
     public StationQueryRepository(JPAQueryFactory query) {
@@ -200,14 +203,15 @@ public class StationQueryRepository {
     }
 
     /**
-     * 방향은 휴게소에만 있다. IC는 방향 구분이 없으므로 방향을 지정해도 같은 노선의 IC 접근지점은 남긴다 (FR-08).
+     * 방향은 휴게소에만 있다. 지정한 방향의 휴게소와, 어느 방향으로 달려도 들를 수 있는 양방향 휴게소를 남긴다 (FR-07).
+     * IC는 방향 구분이 없으므로 방향을 지정해도 같은 노선의 IC 접근지점은 남긴다 (FR-08).
      * IC를 빼려면 accessType=REST_AREA로 지정한다.
      */
     private BooleanExpression directionEq(String direction) {
         if (direction == null) {
             return null;
         }
-        return restArea.direction.eq(direction).or(stationAccess.accessType.eq(AccessType.IC));
+        return restArea.direction.in(direction, BOTH_DIRECTIONS).or(stationAccess.accessType.eq(AccessType.IC));
     }
 
     private BooleanExpression accessTypeEq(AccessType accessType) {
