@@ -123,6 +123,33 @@ class OccupancyAggregationServiceTest {
     }
 
     @Test
+    void 충전중이_6시간_넘게_이어진_충전기는_센서_멈춤으로_보고_미확인으로_센다() {
+        // B가 03:00부터 충전중 → 모든 관측 시점에서 7시간 넘게 그대로라 UNKNOWN
+        jdbc.update("DELETE FROM charger_status_history WHERE charger_id = ?", chargerB);
+        db.history(chargerB, "3", W.minusHours(7), runId);
+
+        service.aggregateWindow(W);
+
+        // 10:00·05·10: A 사용가능 → 혼잡도 0 / 10:15·20·25: A 충전중 → 1.0 (B는 분모에서 빠진다)
+        assertThat((BigDecimal) row().get("occupancy_rate")).isEqualByComparingTo("0.5000");
+        assertThat(row()).containsEntry("full_minutes", 15)
+                // 마지막 시점에 가용 0대지만 B가 미확인이라 만차(false)로 단정하지 않는다
+                .containsEntry("available", null);
+    }
+
+    @Test
+    void 충전중이_6시간_안이면_그대로_충전중으로_센다() {
+        jdbc.update("DELETE FROM charger_status_history WHERE charger_id = ?", chargerB);
+        db.history(chargerB, "3", W.minusHours(5), runId);
+
+        service.aggregateWindow(W);
+
+        // 기본 fixture(B 09:58 충전중)와 같은 결과
+        assertThat((BigDecimal) row().get("occupancy_rate")).isEqualByComparingTo("0.7500");
+        assertThat(row()).containsEntry("available", false);
+    }
+
+    @Test
     void 이력이_없는_충전기는_미확인이라_가용을_단정하지_않는다() {
         jdbc.update("DELETE FROM charger_status_history WHERE charger_id = ?", chargerA);
 
