@@ -1,0 +1,14 @@
+{
+  "resultMsg": "NORMAL SERVICE.",
+  "totalCount": 3,
+  "items": {
+    "item": [
+      { "busiId": "ME", "statId": "ME000001", "chgerId": "01", "stat": "2", "statUpdDt": "20260927101500" },
+      { "busiId": "ME", "statId": "ME000001", "chgerId": "02", "stat": "3", "statUpdDt": "20260927101730" },
+      { "busiId": "EC", "statId": "EC000002", "chgerId": "01", "stat": "9", "statUpdDt": "20260927102000" }
+    ]
+  },
+  "pageNo": 1,
+  "resultCode": "00",
+  "numOfRows": 9999
+}

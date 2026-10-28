@@ -1,0 +1,162 @@
+### R1 후보: 노선 위 접근지점 + 충전소
+                                                                          QUERY PLAN                                                                          
+--------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort  (cost=246.50..246.55 rows=23 width=2078) (actual time=0.549..0.551 rows=15 loops=1)
+   Sort Key: sa1_0.station_id, sa1_0.access_id
+   Sort Method: quicksort  Memory: 28kB
+   Buffers: shared hit=127
+   ->  Nested Loop Semi Join  (cost=33.93..245.97 rows=23 width=2078) (actual time=0.200..0.535 rows=15 loops=1)
+         Buffers: shared hit=124
+         ->  Nested Loop  (cost=33.51..218.13 rows=29 width=2078) (actual time=0.189..0.426 rows=15 loops=1)
+               Buffers: shared hit=64
+               ->  Hash Left Join  (cost=33.22..51.76 rows=29 width=182) (actual time=0.180..0.367 rows=15 loops=1)
+                     Hash Cond: (i1_0.route_id = r2_0.route_id)
+                     Filter: ((r1_0.route_id = 3) OR (r2_0.route_id = 3))
+                     Rows Removed by Filter: 527
+                     Buffers: shared hit=19
+                     ->  Hash Left Join  (cost=31.39..48.26 rows=542 width=164) (actual time=0.166..0.332 rows=542 loops=1)
+                           Hash Cond: (sa1_0.ic_id = i1_0.ic_id)
+                           Buffers: shared hit=18
+                           ->  Hash Left Join  (cost=9.56..25.01 rows=542 width=121) (actual time=0.055..0.183 rows=542 loops=1)
+                                 Hash Cond: (ra1_0.route_id = r1_0.route_id)
+                                 Buffers: shared hit=11
+                                 ->  Hash Left Join  (cost=7.72..21.59 rows=542 width=103) (actual time=0.041..0.119 rows=542 loops=1)
+                                       Hash Cond: (sa1_0.rest_area_id = ra1_0.rest_area_id)
+                                       Buffers: shared hit=10
+                                       ->  Seq Scan on station_access sa1_0  (cost=0.00..12.42 rows=542 width=59) (actual time=0.002..0.020 rows=542 loops=1)
+                                             Buffers: shared hit=7
+                                       ->  Hash  (cost=5.10..5.10 rows=210 width=52) (actual time=0.033..0.033 rows=210 loops=1)
+                                             Buckets: 1024  Batches: 1  Memory Usage: 28kB
+                                             Buffers: shared hit=3
+                                             ->  Seq Scan on rest_area ra1_0  (cost=0.00..5.10 rows=210 width=52) (actual time=0.002..0.013 rows=210 loops=1)
+                                                   Buffers: shared hit=3
+                                 ->  Hash  (cost=1.37..1.37 rows=37 width=18) (actual time=0.007..0.007 rows=37 loops=1)
+                                       Buckets: 1024  Batches: 1  Memory Usage: 10kB
+                                       Buffers: shared hit=1
+                                       ->  Seq Scan on route r1_0  (cost=0.00..1.37 rows=37 width=18) (actual time=0.002..0.003 rows=37 loops=1)
+                                             Buffers: shared hit=1
+                           ->  Hash  (cost=13.59..13.59 rows=659 width=51) (actual time=0.103..0.103 rows=659 loops=1)
+                                 Buckets: 1024  Batches: 1  Memory Usage: 65kB
+                                 Buffers: shared hit=7
+                                 ->  Seq Scan on interchange i1_0  (cost=0.00..13.59 rows=659 width=51) (actual time=0.011..0.046 rows=659 loops=1)
+                                       Buffers: shared hit=7
+                     ->  Hash  (cost=1.37..1.37 rows=37 width=18) (actual time=0.006..0.006 rows=37 loops=1)
+                           Buckets: 1024  Batches: 1  Memory Usage: 10kB
+                           Buffers: shared hit=1
+                           ->  Seq Scan on route r2_0  (cost=0.00..1.37 rows=37 width=18) (actual time=0.001..0.003 rows=37 loops=1)
+                                 Buffers: shared hit=1
+               ->  Index Scan using station_pkey on station s1_0  (cost=0.29..5.74 rows=1 width=1896) (actual time=0.004..0.004 rows=1 loops=15)
+                     Index Cond: (station_id = sa1_0.station_id)
+                     Filter: (del_yn = 'N'::bpchar)
+                     Buffers: shared hit=45
+         ->  Index Scan using charger_station_id_chger_id_key on charger c1_0  (cost=0.42..1.19 rows=2 width=8) (actual time=0.007..0.007 rows=1 loops=15)
+               Index Cond: (station_id = s1_0.station_id)
+               Filter: (is_fast AND (del_yn = 'N'::bpchar))
+               Rows Removed by Filter: 0
+               Buffers: shared hit=60
+ Planning:
+   Buffers: shared hit=575
+ Planning Time: 1.079 ms
+ Execution Time: 0.640 ms
+(57 rows)
+
+### R2 후보 충전소 급속 상태 집계
+                                                                        QUERY PLAN                                                                         
+-----------------------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate  (cost=451.49..452.08 rows=26 width=33) (actual time=0.056..0.067 rows=33 loops=1)
+   Group Key: station_id, current_normalized_status
+   Buffers: shared hit=63
+   ->  Sort  (cost=451.49..451.56 rows=26 width=33) (actual time=0.052..0.055 rows=74 loops=1)
+         Sort Key: station_id, current_normalized_status
+         Sort Method: quicksort  Memory: 29kB
+         Buffers: shared hit=63
+         ->  Bitmap Heap Scan on charger c1_0  (cost=67.21..450.88 rows=26 width=33) (actual time=0.024..0.036 rows=74 loops=1)
+               Recheck Cond: (station_id = ANY ('{15353,17979,22827,30301,37775,405,42825,50299,57773,65247,72721,7879,80195,85245,92719}'::bigint[]))
+               Filter: (is_fast AND (del_yn = 'N'::bpchar))
+               Rows Removed by Filter: 8
+               Heap Blocks: exact=15
+               Buffers: shared hit=60
+               ->  Bitmap Index Scan on charger_station_id_chger_id_key  (cost=0.00..67.16 rows=103 width=0) (actual time=0.020..0.020 rows=82 loops=1)
+                     Index Cond: (station_id = ANY ('{15353,17979,22827,30301,37775,405,42825,50299,57773,65247,72721,7879,80195,85245,92719}'::bigint[]))
+                     Buffers: shared hit=45
+ Planning:
+   Buffers: shared hit=28
+ Planning Time: 0.067 ms
+ Execution Time: 0.079 ms
+(20 rows)
+
+### R3 후보 충전소 급속 최대 출력
+                                                                        QUERY PLAN                                                                         
+-----------------------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate  (cost=451.49..451.95 rows=26 width=12) (actual time=0.035..0.041 rows=15 loops=1)
+   Group Key: station_id
+   Buffers: shared hit=60
+   ->  Sort  (cost=451.49..451.56 rows=26 width=12) (actual time=0.033..0.035 rows=74 loops=1)
+         Sort Key: station_id
+         Sort Method: quicksort  Memory: 27kB
+         Buffers: shared hit=60
+         ->  Bitmap Heap Scan on charger c1_0  (cost=67.21..450.88 rows=26 width=12) (actual time=0.019..0.029 rows=74 loops=1)
+               Recheck Cond: (station_id = ANY ('{15353,17979,22827,30301,37775,405,42825,50299,57773,65247,72721,7879,80195,85245,92719}'::bigint[]))
+               Filter: (is_fast AND (del_yn = 'N'::bpchar))
+               Rows Removed by Filter: 8
+               Heap Blocks: exact=15
+               Buffers: shared hit=60
+               ->  Bitmap Index Scan on charger_station_id_chger_id_key  (cost=0.00..67.16 rows=103 width=0) (actual time=0.017..0.017 rows=82 loops=1)
+                     Index Cond: (station_id = ANY ('{15353,17979,22827,30301,37775,405,42825,50299,57773,65247,72721,7879,80195,85245,92719}'::bigint[]))
+                     Buffers: shared hit=45
+ Planning:
+   Buffers: shared hit=6
+ Planning Time: 0.032 ms
+ Execution Time: 0.046 ms
+(20 rows)
+
+### R4 점유율 이력 (최근 4주)
+                                                                                                        QUERY PLAN                                                                                                         
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Index Only Scan using idx_occupancy_station_window_available on occupancy_30m o1_0  (cost=0.43..822.44 rows=19803 width=17) (actual time=0.011..0.925 rows=20145 loops=1)
+   Index Cond: ((station_id = ANY ('{15353,17979,22827,30301,37775,405,42825,50299,57773,65247,72721,7879,80195,85245,92719}'::bigint[])) AND (window_start >= '2026-09-08 23:21:53.044421'::timestamp without time zone))
+   Heap Fetches: 0
+   Buffers: shared hit=149
+ Planning:
+   Buffers: shared hit=70
+ Planning Time: 0.080 ms
+ Execution Time: 1.310 ms
+(8 rows)
+
+### R5 AI 예측 (도착 구간)
+                                                                                                                                                   QUERY PLAN                                                                                                                                                    
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Bitmap Heap Scan on occupancy_forecast of1_0  (cost=53.86..117.58 rows=165 width=29) (actual time=0.040..0.085 rows=165 loops=1)
+   Recheck Cond: ((station_id = ANY ('{15353,17979,22827,30301,37775,405,42825,50299,57773,65247,72721,7879,80195,85245,92719}'::bigint[])) AND (target_window_start >= '2026-10-06 23:00:00'::timestamp without time zone) AND (target_window_start <= '2026-10-07 04:00:00'::timestamp without time zone))
+   Filter: (generated_at >= '2026-10-06 21:51:53.166729'::timestamp without time zone)
+   Heap Blocks: exact=51
+   Buffers: shared hit=81
+   ->  Bitmap Index Scan on occupancy_forecast_station_id_target_window_start_key  (cost=0.00..53.78 rows=165 width=0) (actual time=0.031..0.031 rows=165 loops=1)
+         Index Cond: ((station_id = ANY ('{15353,17979,22827,30301,37775,405,42825,50299,57773,65247,72721,7879,80195,85245,92719}'::bigint[])) AND (target_window_start >= '2026-10-06 23:00:00'::timestamp without time zone) AND (target_window_start <= '2026-10-07 04:00:00'::timestamp without time zone))
+         Buffers: shared hit=30
+ Planning:
+   Buffers: shared hit=49
+ Planning Time: 0.058 ms
+ Execution Time: 0.090 ms
+(12 rows)
+
+### R4b 과거 통계 집계 (개선: DB에서 요일·도착 슬롯 단위로 센다)
+                                                                                    QUERY PLAN                                                                                    
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ HashAggregate  (cost=1570.97..2068.47 rows=19900 width=29) (actual time=6.418..6.517 rows=210 loops=1)
+   Group Key: o.station_id, (EXTRACT(isodow FROM o.window_start))::integer, ((o.window_start)::time without time zone = (t.slot)::time without time zone)
+   Batches: 1  Memory Usage: 817kB
+   Buffers: shared hit=149
+   ->  Nested Loop  (cost=0.43..1322.22 rows=19900 width=14) (actual time=0.012..4.757 rows=20145 loops=1)
+         Buffers: shared hit=149
+         ->  Function Scan on t  (cost=0.01..0.15 rows=15 width=40) (actual time=0.003..0.004 rows=15 loops=1)
+         ->  Index Only Scan using idx_occupancy_station_window_available on occupancy_30m o  (cost=0.43..54.97 rows=1327 width=17) (actual time=0.002..0.065 rows=1343 loops=15)
+               Index Cond: ((station_id = t.station_id) AND (window_start >= '2026-09-08 23:21:53.044421'::timestamp without time zone))
+               Heap Fetches: 0
+               Buffers: shared hit=149
+ Planning:
+   Buffers: shared hit=37
+ Planning Time: 0.071 ms
+ Execution Time: 6.725 ms
+(15 rows)
+
