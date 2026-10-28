@@ -5,6 +5,7 @@ export interface RequestOptions {
   query?: Record<string, QueryValue | QueryValue[]>;
   body?: unknown;
   signal?: AbortSignal;
+  credentials?: RequestCredentials;
 }
 
 export interface ApiClient {

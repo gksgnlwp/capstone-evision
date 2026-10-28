@@ -38,7 +38,7 @@ export function createHttpClient(settings: Pick<AppConfig, 'apiBaseUrl' | 'apiTi
           method: options.method || 'GET',
           headers: { Accept: 'application/json', ...(options.body === undefined ? {} : { 'Content-Type': 'application/json' }) },
           body: options.body === undefined ? undefined : JSON.stringify(options.body),
-          credentials: 'include',
+          credentials: options.credentials ?? 'include',
           signal: controller.signal,
         });
         if (!response.ok) {

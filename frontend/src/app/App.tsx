@@ -1,18 +1,22 @@
-import { useEffect } from 'react';
-import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { lazy, Suspense, useEffect } from 'react';
+import { Link, Navigate, Route, Routes, matchPath, useLocation } from 'react-router-dom';
 import { MobileLayout } from '../layouts/MobileLayout';
 import { AdminLayout } from '../layouts/AdminLayout';
 import { HomePage } from '../pages/HomePage';
 import { PlaceholderPage } from '../pages/PlaceholderPage';
 import { ComponentGallery } from '../pages/ComponentGallery';
-import { EmptyState } from '../components/ui';
+import { EmptyState, LoadingState } from '../components/ui';
 import { screens, settingsScreen } from './screens';
+import { LocationProvider } from '../features/search/LocationContext';
+import { RouteSearchPage } from '../features/search/RouteSearchPage';
+import { LocationPage } from '../features/search/LocationPage';
+const MapSearchPage = lazy(() => import('../features/search/MapSearchPage').then(module => ({ default: module.MapSearchPage })));
 
 function RouteEffects() {
   const { pathname } = useLocation();
   useEffect(() => {
     window.scrollTo(0, 0);
-    const title = document.querySelector('h1')?.textContent || '충전예보';
+    const title = [...screens, settingsScreen].find(screen => matchPath({ path: screen.path, end: true }, pathname))?.title || '페이지를 찾을 수 없어요';
     document.title = `${title} · EVISION`;
     // SPA 페이지 이동을 키보드/스크린리더 사용자에게도 알려 줍니다.
     document.getElementById('main-content')?.focus({ preventScroll: true });
@@ -21,13 +25,16 @@ function RouteEffects() {
 }
 
 export function App() {
-  return <>
+  return <LocationProvider>
     <RouteEffects />
     <a href="#main-content" className="skip-link">본문으로 이동</a>
     <Routes>
       <Route element={<MobileLayout />}>
         <Route index element={<HomePage />} />
-        {screens.filter(s => s.audience === 'mobile' && s.path !== '/').map(screen =>
+        <Route path="/route" element={<RouteSearchPage />} />
+        <Route path="/map" element={<Suspense fallback={<LoadingState label="지도를 준비하고 있습니다." />}><MapSearchPage /></Suspense>} />
+        <Route path="/location" element={<LocationPage />} />
+        {screens.filter(s => s.audience === 'mobile' && !['/', '/route', '/map', '/location'].includes(s.path)).map(screen =>
           <Route key={screen.id} path={screen.path} element={<PlaceholderPage screen={screen} />} />)}
         <Route path="/settings" element={<PlaceholderPage screen={settingsScreen} />} />
         {import.meta.env.DEV && <Route path="/dev/ui" element={<ComponentGallery />} />}
@@ -40,5 +47,5 @@ export function App() {
         <Route path="*" element={<EmptyState title="운영 페이지를 찾을 수 없어요" action={<Link to="/admin/login" className="text-link">운영자 화면으로 이동</Link>} />} />
       </Route>
     </Routes>
-  </>;
+  </LocationProvider>;
 }

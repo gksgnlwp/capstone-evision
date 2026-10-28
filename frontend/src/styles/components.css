@@ -35,3 +35,4 @@
 .dialog::backdrop { background: rgb(23 44 48 / 45%); }
 .dialog__heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
 .fatal-state { max-width: 480px; margin: 15vh auto; padding: 32px; display: flex; flex-direction: column; gap: 16px; }
+.environment-badge { display: inline-flex; align-items: center; border: 1px solid var(--color-border); border-radius: var(--radius-pill); padding: 3px 8px; color: var(--color-text-muted); font-size: 10px; font-weight: 700; letter-spacing: .06em; flex-shrink: 0; }
