@@ -225,6 +225,25 @@ class StationQueryControllerTest {
     }
 
     @Test
+    void 양방향_휴게소는_어느_방향을_지정해도_나온다() throws Exception {
+        // 노선 A에 양방향 휴게소 RA3를 추가하고 S8을 매핑한다
+        long ra3 = restArea(routeA, "옥천만남", "양방향");
+        long s8 = station("ST000008", 37.60, 127.10, false);
+        charger(s8, "01", "04", true, false, "2", "AVAILABLE", T);
+        mapRestArea(s8, ra3);
+
+        mvc.perform(get("/api/stations").param("routeId", String.valueOf(routeA)).param("direction", "상행"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.stations[*].statId", contains("ST000001", "ST000008")))
+                .andExpect(jsonPath("$.stations[1].accesses[0].direction").value("양방향"));
+        mvc.perform(get("/api/stations").param("routeId", String.valueOf(routeA)).param("direction", "하행"))
+                .andExpect(jsonPath("$.stations[*].statId", contains("ST000002", "ST000008")));
+        // 양방향만 지정하면 양방향 휴게소만
+        mvc.perform(get("/api/stations").param("routeId", String.valueOf(routeA)).param("direction", "양방향"))
+                .andExpect(jsonPath("$.stations[*].statId", contains("ST000008")));
+    }
+
+    @Test
     void 접근유형과_충전기_타입으로_좁힌다() throws Exception {
         mvc.perform(area(get("/api/stations")).param("accessType", "IC"))
                 .andExpect(jsonPath("$.stations[*].statId", contains("ST000002")));

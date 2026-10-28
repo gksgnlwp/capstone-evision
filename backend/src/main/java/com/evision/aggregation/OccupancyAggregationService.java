@@ -86,7 +86,8 @@ public class OccupancyAggregationService {
         List<LocalDateTime> points = pointsOf(windowStart);
         List<LocalDateTime> runs = repository.successfulStatusRunTimes(
                 points.get(0).minus(VALIDITY_LOOKBACK), points.get(points.size() - 1).plus(VALIDITY_TOLERANCE));
-        Map<Long, Map<LocalDateTime, PointObservation>> counts = repository.pointCounts(windowStart);
+        Map<Long, Map<LocalDateTime, PointObservation>> counts = repository.pointCounts(windowStart,
+                properties.stuckChargingHours());
 
         List<OccupancyAggregationRepository.Row> rows = new ArrayList<>(targets.size());
         targets.forEach((stationId, fastCount) -> {

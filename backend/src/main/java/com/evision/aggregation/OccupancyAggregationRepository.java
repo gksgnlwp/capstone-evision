@@ -30,7 +30,10 @@ public class OccupancyAggregationRepository {
             GROUP BY s.station_id
             """;
 
-    /** 관측 시점 6개 × 서비스 대상 급속충전기의 정규화 상태 분포 */
+    /**
+     * 관측 시점 6개 × 서비스 대상 급속충전기의 정규화 상태 분포.
+     * 충전중이 기준 시간보다 오래 이어진 충전기는 센서 멈춤으로 보고 UNKNOWN으로 센다 (가짜 만차 방지).
+     */
     static final String POINT_COUNTS = """
             WITH pts AS (
               SELECT CAST(? AS timestamp) + make_interval(mins => n * 5) AS t
@@ -49,14 +52,20 @@ public class OccupancyAggregationRepository {
             FROM pts
             CROSS JOIN tg
             LEFT JOIN LATERAL (
-              SELECT h.status_code FROM charger_status_history h
+              SELECT h.status_code, h.status_updated_at FROM charger_status_history h
               WHERE h.charger_id = tg.charger_id AND h.status_updated_at <= pts.t
               ORDER BY h.status_updated_at DESC
               LIMIT 1
             ) latest ON true
             LEFT JOIN code_dictionary cd
               ON cd.code_group = 'CHARGER_STAT' AND cd.code = CAST(latest.status_code AS text)
-            CROSS JOIN LATERAL (SELECT coalesce(cd.normalized_status, 'UNKNOWN') AS ns) st
+            CROSS JOIN LATERAL (
+              SELECT CASE
+                       WHEN cd.normalized_status = 'CHARGING'
+                        AND latest.status_updated_at < pts.t - make_interval(hours => ?) THEN 'UNKNOWN'
+                       ELSE coalesce(cd.normalized_status, 'UNKNOWN')
+                     END AS ns
+            ) st
             GROUP BY tg.station_id, pts.t
             """;
 
@@ -92,15 +101,20 @@ public class OccupancyAggregationRepository {
         return map;
     }
 
-    /** (station_id, 시점) → 상태 분포. 유효성은 호출한 쪽에서 채운다 */
-    public Map<Long, Map<LocalDateTime, PointObservation>> pointCounts(LocalDateTime windowStart) {
+    /**
+     * (station_id, 시점) → 상태 분포. 유효성은 호출한 쪽에서 채운다.
+     *
+     * @param stuckChargingHours 충전중이 이 시간보다 오래되면 UNKNOWN으로 센다
+     */
+    public Map<Long, Map<LocalDateTime, PointObservation>> pointCounts(LocalDateTime windowStart,
+            int stuckChargingHours) {
         Map<Long, Map<LocalDateTime, PointObservation>> map = new HashMap<>();
         jdbc.query(POINT_COUNTS, rs -> {
             long stationId = rs.getLong(1);
             LocalDateTime t = rs.getTimestamp(2).toLocalDateTime();
             map.computeIfAbsent(stationId, k -> new HashMap<>())
                     .put(t, new PointObservation(t, true, rs.getInt(3), rs.getInt(4), rs.getInt(5), rs.getInt(6)));
-        }, Timestamp.valueOf(windowStart));
+        }, Timestamp.valueOf(windowStart), stuckChargingHours);
         return map;
     }
 
