@@ -1,5 +1,8 @@
 import { expect, test } from '@playwright/test';
 
+// 키 없이 지도 미설정 상태를 검사하며 외부 SDK를 호출하지 않습니다.
+test.beforeEach(async ({ page }) => { await page.route('https://dapi.kakao.com/**', route => route.abort()); });
+
 const screenPaths = [
   '/', '/route', '/map', '/settings/operators', '/recommendations/arrival', '/recommendations', '/compare',
   '/stations/preview-station', '/stations/preview-station/prediction', '/stations/preview-station/patterns',

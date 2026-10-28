@@ -1,16 +1,21 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ChevronRight, MapPin, Navigation } from 'lucide-react';
-import { Button } from '../components/ui';
+import { Button, Chip } from '../components/ui';
+import { readRecentDestinations, saveRecentDestination } from '../features/search/recentDestinations';
+import { useLocationAccess } from '../features/search/LocationContext';
 
 /** M01: 별도 소개나 화면 목록을 거치지 않고 목적지 설정에서 시작합니다. */
 export function HomePage() {
   const navigate = useNavigate();
   const [destination, setDestination] = useState('');
+  const [recent] = useState(readRecentDestinations);
+  const location = useLocationAccess();
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!destination.trim()) return;
+    saveRecentDestination(destination);
     navigate(`/route?${new URLSearchParams({ destination: destination.trim() })}`);
   }
 
@@ -21,8 +26,8 @@ export function HomePage() {
         <div className="journey-fields">
           <div className="journey-field">
             <Navigation size={18} className="journey-origin-icon" aria-hidden="true" />
-            <div className="journey-field__body"><span className="journey-label">출발</span><span>현재 위치</span></div>
-            <Link to="/location" className="text-link">위치 설정</Link>
+            <div className="journey-field__body"><span className="journey-label">출발</span><span>{location.position ? '현재 위치 확인됨' : '현재 위치 미확인'}</span></div>
+            <Link to="/location?returnTo=home" className="text-link">위치 확인</Link>
           </div>
           <div className="journey-field">
             <MapPin size={18} className="journey-destination-icon" aria-hidden="true" />
@@ -33,6 +38,7 @@ export function HomePage() {
             </div>
           </div>
         </div>
+        {recent.length > 0 && <div className="recent-destinations"><p className="journey-label">최근 목적지</p><div className="row wrap">{recent.map(item => <Chip key={item} selected={destination === item} onClick={() => setDestination(item)}>{item}</Chip>)}</div></div>}
         <Link to="/route" className="route-shortcut">
           <div><p className="small muted">이용할 고속도로를 알고 있다면</p><span>노선·방향 직접 선택하기</span></div>
           <ChevronRight size={20} aria-hidden="true" />

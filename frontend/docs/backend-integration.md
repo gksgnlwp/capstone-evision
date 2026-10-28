@@ -1,11 +1,30 @@
 # 백엔드 연결 기준
 
-현재는 백엔드 소스나 OpenAPI를 받지 않은 상태입니다. 엔드포인트, DTO, 인증 방식, 페이지네이션 형식을 임의로 확정하지 않았습니다. `apiClient`는 연결에 필요한 공통 요청 처리까지만 구현합니다.
+2번 작업에서는 현재 레포의 `StationQueryController`, `StationSearchCondition`, `RouteListResponse`, `StationSearchResponse`, `AccessPointView`, `CorsConfig`를 확인했습니다. 탐색에 쓰는 두 API를 해당 규격으로 구현했습니다. 운영 서버의 실제 데이터와의 통합 검증은 아직 수행하지 않았습니다. 다른 업무 API는 해당 작업에서 소스와 테스트를 확인해 연결합니다.
 
-## 모드
+## 탐색 연결 규격
 
-- `VITE_DATA_MODE=mock`: 기능별로 등록한 예시 핸들러만 실행합니다. 미등록 기능은 명시적으로 실패합니다.
-- `VITE_DATA_MODE=api`: `VITE_API_BASE_URL` 아래로 실제 요청을 전송합니다. 실패 시 예시 데이터로 바꾸지 않습니다.
+| 항목 | 연결 기준 |
+|---|---|
+| 노선 | `GET /api/routes`, `{ routes: [...] }` |
+| 노선 검색 | `GET /api/stations?routeId=...&direction=...` |
+| 지도 검색 | `minLat`, `minLng`, `maxLat`, `maxLng` 네 값 모두 전달 |
+| 접근 필터 | `accessType=REST_AREA` 또는 `IC`, 전체일 때 생략 |
+| 충전기 필터 | `chargerType` 원천 코드의 완전 일치. 복합 타입은 별도 선택 |
+| 조회 상한 | 기본 100, 최대 500. `truncated=true`이면 추가 조회 또는 조건 축소 안내 |
+| 상태 대수 | 필터에 맞는 충전소의 급속충전기 전체 기준. 선택한 커넥터만의 가용 대수가 아님 |
+| 갱신 시각 | 오프셋 없는 LocalDateTime은 KST로 해석 |
+| 인증 | 공개 GET에는 `credentials: omit` 사용 |
+
+백엔드는 `station_id` 순으로 응답합니다. 위치를 확인한 경우 프론트에서 **조회된 후보 안에서** 직선거리 순으로 재정렬합니다. 잘린 결과 전체에 대한 최단거리 정렬이나 실제 도로상의 전방 여부는 보장하지 않습니다. 지도와 목록 모두 같은 충전소 ID를 중복 표시하지 않으며, 여러 접근지점은 카드에 함께 요약합니다.
+
+목적지에서 노선을 자동 계산하는 엔드포인트는 없으므로, 목적지 입력 후 노선·방향을 직접 선택합니다. 실제 경로·거리·ETA를 임의 생성하지 않습니다.
+
+## 환경
+
+- `VITE_APP_ENV=DEV`: 더미 데이터로 UI를 표시하고 헤더 우측에 DEV만 표시합니다.
+- `VITE_APP_ENV=PRD`: `VITE_API_BASE_URL` 아래로 실제 요청을 전송합니다. DEV 표시를 숨기며 실패 시 더미 데이터로 바꾸지 않습니다.
+- `.env.development`는 DEV, `.env.production`은 PRD입니다. Vite의 번들 모드와 앱 환경을 혼동하지 않도록 `config.environment`에서 데이터 경로와 표시를 함께 결정합니다.
 - `VITE_API_TIMEOUT_MS`: 요청 제한 시간. 기본 10000ms입니다.
 - `VITE_*`는 브라우저 번들에 포함됩니다. 비밀키·공공 API 인증키를 넣지 않습니다.
 
@@ -23,7 +42,7 @@ const load = (signal: AbortSignal) => apiClient.request('백엔드에서 확정�
 
 401·403·404·서버 오류·연결 오류·타임아웃·잘못된 JSON을 구분합니다. 401은 기능별 인증 컨텍스트에서 로그인으로 전환할 근거로 사용합니다. 공통 클라이언트가 임의로 라우트를 변경하거나 로그인 정보를 저장하지 않습니다.
 
-현재 fetch는 `credentials: include`를 사용하지만 인증 방식 확정은 아닙니다. 운영자 인증은 6번 작업에서 실제 토큰/쿠키 규격, CSRF, CORS와 함께 검토합니다. 비밀번호나 토큰을 localStorage에 저장하는 코드는 없습니다. 서로 다른 도메인에 연결할 경우 백엔드 CORS와 쿠키 정책이 필요합니다.
+공통 fetch의 기본값은 `credentials: include`이고 요청별로 변경할 수 있습니다. 탐색 API는 `omit`을 명시합니다. 운영자 인증은 6번 작업에서 실제 토큰/쿠키 규격, CSRF, CORS와 함께 검토합니다. 비밀번호나 토큰을 localStorage에 저장하는 코드는 없습니다. 서로 다른 도메인에 연결할 경우 백엔드 CORS와 쿠키 정책이 필요합니다.
 
 ## 백엔드 소스 확인 후 확정할 항목
 
