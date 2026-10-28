@@ -18,6 +18,17 @@
 --   안성(서울) 0.20 (평소보다 붐빌 것으로 예측), 죽암(서울) 0.95, 청주(서울) 0.45
 --   generated_at = 실행 시각이라 90분(evision.recommend.forecast-max-age)이 지나면 쓰이지 않는다. 다시 실행하면 갱신된다.
 
+-- 안전장치: 수집 데이터가 쌓인 DB(운영 서버 등)에서는 아무것도 지우지 않고 멈춘다.
+-- psql은 오류가 나도 다음 문장을 계속 실행하므로 ON_ERROR_STOP이 꼭 있어야 한다.
+\set ON_ERROR_STOP on
+DO $$
+BEGIN
+  IF (SELECT count(*) FROM collection_run) > 100 THEN
+    RAISE EXCEPTION '수집 데이터가 있는 DB입니다(collection_run %건). seed_demo.sql은 로컬 DB에서만 실행하세요.',
+      (SELECT count(*) FROM collection_run);
+  END IF;
+END $$;
+
 SET TIME ZONE 'Asia/Seoul';
 BEGIN;
 
