@@ -1,0 +1,9 @@
+xgboost
+pandas
+numpy
+scikit-learn
+holidays
+pytest
+# DB에서 직접 읽을 때만 필요
+# sqlalchemy
+# psycopg2-binary
