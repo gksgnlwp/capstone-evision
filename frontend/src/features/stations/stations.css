@@ -1,0 +1,30 @@
+.station-detail-page .card { min-width: 0; }
+.station-detail-page .card h2 { overflow-wrap: anywhere; }
+.station-detail-page .card .small svg { vertical-align: middle; }
+.charger-summary-count { color: var(--color-primary); font-size: var(--text-sm); white-space: nowrap; }
+.charger-alert { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-radius: var(--radius-md); font-size: var(--text-sm); }
+.charger-alert--danger { background: var(--color-danger-soft); color: var(--color-danger); }
+.charger-alert--warning { background: var(--color-warning-soft); color: var(--color-warning); }
+.charger-alert .text-link { align-self: flex-start; color: inherit; }
+.charger-stale-label { color: var(--color-warning); font-weight: 700; }
+.charger-gauge { display: flex; width: 100%; height: 12px; overflow: hidden; background: var(--color-neutral-soft); border-radius: var(--radius-pill); }
+.charger-gauge__segment { display: block; height: 100%; }
+.charger-gauge__segment--available { background: var(--color-primary); }
+.charger-gauge__segment--charging { background: var(--color-charging); }
+.charger-gauge__segment--unavailable { background: var(--color-danger); }
+.charger-gauge__segment--unknown { background: #91a1a2; }
+.charger-gauge-legend { display: flex; flex-wrap: wrap; gap: 6px 12px; color: var(--color-text-muted); font-size: var(--text-xs); }
+.charger-gauge-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.charger-gauge-legend__dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+.detail-list { display: flex; flex-direction: column; gap: 10px; margin: 0; font-size: var(--text-sm); }
+.detail-list > div { display: grid; grid-template-columns: 90px 1fr; gap: 8px; }
+.detail-list dt { color: var(--color-text-muted); }
+.detail-list dd { margin: 0; overflow-wrap: anywhere; }
+.charger-list { display: flex; flex-direction: column; }
+.charger-row { display: flex; flex-direction: column; gap: 8px; padding: 14px 0; }
+.charger-row + .charger-row { border-top: 1px solid var(--color-border); }
+.detail-links { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.detail-links .button { padding: 9px; font-size: var(--text-sm); }
+.history-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.history-list li { display: flex; flex-direction: column; gap: 8px; }
+.history-list time { color: var(--color-text-muted); font-size: var(--text-xs); }

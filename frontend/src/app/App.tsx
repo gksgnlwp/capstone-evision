@@ -13,6 +13,10 @@ import { LocationPage } from '../features/search/LocationPage';
 import { RecommendationPage } from '../features/recommendations/RecommendationPage';
 import { ComparePage } from '../features/recommendations/ComparePage';
 import { ArrivalPage } from '../features/recommendations/ArrivalPage';
+import { StationDetailPage } from '../features/stations/StationDetailPage';
+import { ChargerHistoryPage } from '../features/stations/ChargerHistoryPage';
+import { PredictionPage, PatternPage } from '../features/stations/PredictionPage';
+import { PredictionUnavailablePage } from '../features/stations/PredictionUnavailablePage';
 const MapSearchPage = lazy(() => import('../features/search/MapSearchPage').then(module => ({ default: module.MapSearchPage })));
 
 function RouteEffects() {
@@ -40,7 +44,12 @@ export function App() {
         <Route path="/recommendations" element={<RecommendationPage />} />
         <Route path="/recommendations/arrival" element={<ArrivalPage />} />
         <Route path="/compare" element={<ComparePage />} />
-        {screens.filter(s => s.audience === 'mobile' && !['/', '/route', '/map', '/location', '/recommendations', '/recommendations/arrival', '/compare'].includes(s.path)).map(screen =>
+        <Route path="/stations/:stationId" element={<StationDetailPage />} />
+        <Route path="/stations/:stationId/prediction" element={<PredictionPage />} />
+        <Route path="/stations/:stationId/patterns" element={<PatternPage />} />
+        <Route path="/stations/:stationId/chargers/:chargerId/history" element={<ChargerHistoryPage />} />
+        <Route path="/stations/:stationId/prediction-unavailable" element={<PredictionUnavailablePage />} />
+        {screens.filter(s => s.audience === 'mobile' && !['/', '/route', '/map', '/location', '/recommendations', '/recommendations/arrival', '/compare', '/stations/:stationId', '/stations/:stationId/prediction', '/stations/:stationId/patterns', '/stations/:stationId/chargers/:chargerId/history', '/stations/:stationId/prediction-unavailable'].includes(s.path)).map(screen =>
           <Route key={screen.id} path={screen.path} element={<PlaceholderPage screen={screen} />} />)}
         <Route path="/settings" element={<PlaceholderPage screen={settingsScreen} />} />
         {import.meta.env.DEV && <Route path="/dev/ui" element={<ComponentGallery />} />}

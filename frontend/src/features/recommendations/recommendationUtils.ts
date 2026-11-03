@@ -12,8 +12,10 @@ export function accessLabel(item: RecommendationItem) {
     : `IC${item.access.icName ? ` · ${item.access.icName}` : ''}`;
 }
 export function reasonLabel(item: RecommendationItem) {
-  if (item.access.accessType === 'IC') return `IC 대안 · 우회거리 약 ${item.detourKm.toFixed(1)}km`;
-  return `휴게소 우선 · 도착 시 이용 가능 확률 ${probabilityLabel(item.availabilityProbability)}`;
+  const access = item.access.accessType === 'IC'
+    ? `IC 인근 · 우회거리 약 ${item.detourKm.toFixed(1)}km`
+    : '휴게소 충전소';
+  return `${access} · 이용 가능 확률 ${probabilityLabel(item.availabilityProbability)} · 급속충전기 ${item.fastChargerCount}대`;
 }
 export function arrivalLabel(eta: string) {
   const parsed = new Date(/(?:Z|[+-]\d\d:\d\d)$/.test(eta) ? eta : `${eta}+09:00`);

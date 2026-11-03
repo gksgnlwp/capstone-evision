@@ -12,6 +12,7 @@ import './styles/components.css';
 import './styles/layouts.css';
 import './features/search/search.css';
 import './features/recommendations/recommendations.css';
+import './features/stations/stations.css';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

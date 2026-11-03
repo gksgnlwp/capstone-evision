@@ -33,7 +33,7 @@ export function RecommendationPage() {
   }
 
   return <div className="stack recommendation-page">
-    <div><h1>충전소 추천</h1><p className="small muted">도착 시점에 이용 가능성이 높은 순으로 확인해요.</p></div>
+    <div><h1>충전소 추천</h1><p className="small muted">이용 가능 확률과 우회거리 등을 종합한 추천 순서입니다.</p></div>
     <section className="card stack" aria-label="추천 조건">
       {params.get('destination') && <p className="small muted">목적지 {params.get('destination')}</p>}
       {routes.status === 'loading' && <LoadingState label="노선을 불러오고 있습니다." />}
@@ -67,7 +67,7 @@ function RecommendationResults({ query, params, selected, onToggle }: { query: R
     {result.data.recommendations.length === 0 ? <EmptyState title="추천 가능한 충전소가 없어요" description="현재 위치, 노선 또는 남은 주행 가능 거리를 확인해 주세요." />
       : <div className="station-list">{result.data.recommendations.map(item => <RecommendationCard key={item.stationId} item={item} selected={selected.includes(item.stationId)} onToggle={() => onToggle(item.stationId)} />)}</div>}
     {selected.length === 2 && <Link className="button button--primary button--full" to={`/compare?${compareParams}`}>선택한 2곳 비교하기</Link>}
-    <p className="search-footnote">이용 확률은 서버 추천 결과입니다. 도로거리는 직선거리 보정에 따른 추정치이며, 대기시간은 현재 API에서 제공하지 않습니다.</p>
+    <p className="search-footnote">추천 순위는 이용 가능 확률·우회거리·출력·충전기 수·주행 가능 범위를 함께 반영합니다. 도로거리는 직선거리 보정에 따른 추정치이며, 대기시간은 현재 API에서 제공하지 않습니다.</p>
   </div>;
 }
 
@@ -77,7 +77,7 @@ function RecommendationCard({ item, selected, onToggle }: { item: Recommendation
     <h3>{item.name}</h3>
     <div className="row wrap"><Badge tone={item.access.accessType === 'REST_AREA' ? 'success' : 'info'}>{accessLabel(item)}</Badge><Badge tone={item.basis === 'AI_FORECAST' ? 'success' : 'neutral'}>{basisLabel(item)}</Badge></div>
     <div className="recommend-metrics"><div><span>이동</span><strong>약 {item.distanceKm.toFixed(1)}km</strong></div><div><span>도착</span><strong>{arrivalLabel(item.eta)}</strong></div><div><span>이용 확률</span><strong>{probabilityLabel(item.availabilityProbability)}</strong></div><div><span>예상 대기</span><strong>정보 없음</strong></div></div>
-    <p className="recommend-reason">추천 사유 · {reasonLabel(item)}</p>
+    <p className="recommend-reason">추천 판단 정보 · {reasonLabel(item)}</p>
     <Link className="text-link" to={`/stations/${item.stationId}`}>충전소 상세 보기</Link>
   </article>;
 }

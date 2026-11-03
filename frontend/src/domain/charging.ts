@@ -3,9 +3,9 @@ export type NormalizedStatus = 'AVAILABLE' | 'CHARGING' | 'UNAVAILABLE' | 'UNKNO
 export type AccessType = 'REST_AREA' | 'IC';
 export type CollectionRunStatus = 'RUNNING' | 'SUCCESS' | 'PARTIAL' | 'FAILED';
 
-export const chargerStatuses: Record<NormalizedStatus, { label: string; tone: 'success' | 'info' | 'danger' | 'neutral' }> = {
+export const chargerStatuses: Record<NormalizedStatus, { label: string; tone: 'success' | 'warning' | 'danger' | 'neutral' }> = {
   AVAILABLE: { label: '이용 가능', tone: 'success' },
-  CHARGING: { label: '충전 중', tone: 'info' },
+  CHARGING: { label: '충전 중', tone: 'warning' },
   UNAVAILABLE: { label: '이용 불가', tone: 'danger' },
   UNKNOWN: { label: '알 수 없음', tone: 'neutral' },
 };

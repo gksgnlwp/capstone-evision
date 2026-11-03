@@ -3,7 +3,7 @@ import type { ApiClient } from '../../services/api';
 import { createMockClient } from '../../services/api/mockClient';
 import { recommendationHandlers } from './recommendationFixtures';
 import { createRecommendationService } from './recommendationService';
-import { arrivalLabel, basisLabel, externalDirectionsUrl } from './recommendationUtils';
+import { arrivalLabel, basisLabel, externalDirectionsUrl, reasonLabel } from './recommendationUtils';
 
 const query = { position: { lat: 37.23, lng: 127.10 }, routeId: 1, direction: '하행', remainingRangeKm: 150 };
 
@@ -23,6 +23,9 @@ describe('추천 API와 비교 데이터', () => {
     expect(result.recommendations[1]).toMatchObject({ stationId: 103, rank: 2, access: { accessType: 'IC' } });
     expect(basisLabel(result.recommendations[0])).toBe('AI 예측 기반');
     expect(externalDirectionsUrl(result.recommendations[0])).toContain('map.kakao.com/link/to/');
+    expect(reasonLabel(result.recommendations[0])).toContain('휴게소 충전소');
+    expect(reasonLabel(result.recommendations[1])).toContain('IC 인근');
+    expect(reasonLabel(result.recommendations[0])).not.toContain('휴게소 우선');
   });
   it('도달 범위를 넘는 충전소를 제외하고 후보 수를 알린다', async () => {
     const result = await createRecommendationService(createMockClient(recommendationHandlers, 0)).getRecommendations({ ...query, remainingRangeKm: 10 });

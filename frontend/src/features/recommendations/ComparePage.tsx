@@ -42,7 +42,7 @@ function CompareResults({ query, ids, params }: { query: RecommendationQuery; id
   return <div className="stack compare-page">
     <div><Link className="text-link" to={`/recommendations?${params}`}>← 추천 결과</Link><h1>추천 비교</h1><p className="small muted">선택한 2곳 · 서버 추정 도착시각 기준</p></div>
     <div className="compare-table-wrap"><table className="compare-table"><thead><tr><th scope="col">항목</th>{items.map(item => <th key={item.stationId} scope="col"><span className="compare-rank">{item.rank}위</span>{item.name}</th>)}</tr></thead><tbody>{rows.map(row => <tr key={row.label}><th scope="row">{row.label}</th>{items.map(item => <td key={item.stationId}>{row.value(item)}</td>)}</tr>)}</tbody></table></div>
-    <section className="card stack"><h2>추천 사유</h2>{items.map(item => <p key={item.stationId} className="small"><Badge tone={item.access.accessType === 'REST_AREA' ? 'success' : 'info'}>{item.rank}위</Badge> {reasonLabel(item)}</p>)}</section>
+    <section className="card stack"><h2>추천 판단 정보</h2>{items.map(item => <p key={item.stationId} className="small"><Badge tone={item.access.accessType === 'REST_AREA' ? 'success' : 'info'}>{item.rank}위</Badge> {reasonLabel(item)}</p>)}</section>
     <RecommendationMap items={items} />
     <p className="search-footnote">이동 거리는 서버의 추정 도로거리입니다. 예상 대기시간과 운영기관은 현재 추천 API 응답에 없어 정보 없음으로 표시합니다.</p>
     <div className="compare-actions">{items.map(item => <div key={item.stationId} className="card stack"><strong>{item.name}</strong><Link className="button button--secondary button--full" to={`/stations/${item.stationId}`}>상세 보기</Link><a className="button button--primary button--full" href={externalDirectionsUrl(item)} target="_blank" rel="noopener noreferrer">외부 지도로 길 안내</a></div>)}</div>
