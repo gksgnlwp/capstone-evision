@@ -1,5 +1,7 @@
 package com.evision.reference;
 
+import java.util.Collection;
+
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
@@ -9,6 +11,9 @@ import org.springframework.stereotype.Component;
  * <p>휴게소에 매핑되지 않은 충전소 중 공용(이용 제한 없음, 공동주택 제외)·24시간·급속충전기 보유 충전소를
  * IC(분기점 JCT 제외)마다 직선거리가 가까운 순으로 최대 N곳 매핑한다. 우회거리는 직선거리의 2배로 근사한다.
  * 기존 AUTO 매핑만 지우고 다시 만든다. 사람이 넣은 MANUAL 매핑은 건드리지 않는다.
+ *
+ * <p>공공 API는 버스 차고지·외부인 출입 불가 시설도 limit_yn을 'N'으로 주는 경우가 많아, 이용 제한 설명·이용 시간의
+ * 문구로 한 번 더 거르고, 그래도 남는 비공용 충전소는 사람이 확인한 제외 목록(ic_exclude.csv)으로 뺀다.
  */
 @Component
 public class IcAutoMapper {
@@ -37,6 +42,8 @@ public class IcAutoMapper {
                   AND s.del_yn = 'N'
                   AND COALESCE(s.limit_yn, 'N') = 'N'
                   AND s.name !~* ?
+                  AND (COALESCE(s.limit_detail, '') || ' ' || COALESCE(s.use_time, '')) !~* ?
+                  AND s.stat_id <> ALL (string_to_array(?, ','))
                   AND s.use_time LIKE '%24%'
                   AND EXISTS (SELECT 1 FROM charger c
                               WHERE c.station_id = s.station_id AND c.is_fast AND c.del_yn = 'N')
@@ -59,14 +66,19 @@ public class IcAutoMapper {
     public record Result(int removed, int mapped) {
     }
 
-    /** 호출하는 쪽의 트랜잭션 안에서 실행된다 (적재 전체가 한 트랜잭션). 꺼져 있으면 기존 AUTO 매핑을 그대로 둔다. */
-    public Result rebuild() {
+    /**
+     * 호출하는 쪽의 트랜잭션 안에서 실행된다 (적재 전체가 한 트랜잭션). 꺼져 있으면 기존 AUTO 매핑을 그대로 둔다.
+     *
+     * @param excludedStatIds 사람이 확인해 자동 매핑에서 뺄 충전소 (ic_exclude.csv)
+     */
+    public Result rebuild(Collection<String> excludedStatIds) {
         if (!properties.icAutoMapping()) {
             return new Result(0, 0);
         }
         double r = properties.icRadiusKm();
         int removed = jdbc.update(DELETE_AUTO);
-        int mapped = jdbc.update(INSERT_AUTO, r, r, r, r, properties.icExcludeNamePattern(), r,
+        int mapped = jdbc.update(INSERT_AUTO, r, r, r, r, properties.icExcludeNamePattern(),
+                properties.icExcludeRestrictionPattern(), String.join(",", excludedStatIds), r,
                 properties.icMaxPerIc());
         return new Result(removed, mapped);
     }
