@@ -10,7 +10,7 @@ export default defineConfig({
     { command: 'npm run dev -- --port 5184 --strictPort', url: 'http://127.0.0.1:5184', env: { VITE_APP_ENV: 'PRD', VITE_KAKAO_MAP_APP_KEY: '' }, reuseExistingServer: !process.env.CI },
   ],
   projects: [
-    { name: 'mobile', testIgnore: '**/search-api.spec.ts', use: { ...devices['iPhone 13'], defaultBrowserType: 'chromium' } },
-    { name: 'api-contract', testMatch: '**/search-api.spec.ts', use: { ...devices['iPhone 13'], defaultBrowserType: 'chromium', baseURL: 'http://127.0.0.1:5184' } },
+    { name: 'mobile', testIgnore: '**/*-api.spec.ts', use: { ...devices['iPhone 13'], defaultBrowserType: 'chromium' } },
+    { name: 'api-contract', testMatch: '**/*-api.spec.ts', use: { ...devices['iPhone 13'], defaultBrowserType: 'chromium', baseURL: 'http://127.0.0.1:5184' } },
   ],
 });

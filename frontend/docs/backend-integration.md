@@ -30,6 +30,8 @@
 
 ## 기능별 구현 방식
 
+3번 작업의 추천은 현재 백엔드 `RecommendController`의 공개 `GET /api/recommendations`를 사용합니다. `lat`, `lng`, `routeId`, `remainingRangeKm`이 필수이고 `direction`, `chargerType`, `limit`은 선택입니다. 응답의 `recommendations` 순위를 유지하고 `availabilityProbability`, `basis`, `eta`, `distanceKm`, `detourKm`을 검증해 표시합니다. 현재 API에는 도착시각 입력, 예상 대기시간, 운영기관이 없습니다. M05 입력을 결과에 반영하려면 백엔드 계약을 확장해야 하며, 현재 프론트는 지원하지 않는 기능을 완료된 것처럼 표시하지 않습니다.
+
 각 작업의 기능 폴더에서 화면 모델과 서비스 인터페이스를 정의하고, mock fixture와 실제 DTO 변환을 분리합니다. 응답을 제네릭 타입으로 지정해도 런타임 검증이 되지 않습니다. 실제 연동 시 스키마 검증 또는 명시적 파싱을 어댑터에 추가합니다.
 
 ```ts

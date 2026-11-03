@@ -10,6 +10,9 @@ import { screens, settingsScreen } from './screens';
 import { LocationProvider } from '../features/search/LocationContext';
 import { RouteSearchPage } from '../features/search/RouteSearchPage';
 import { LocationPage } from '../features/search/LocationPage';
+import { RecommendationPage } from '../features/recommendations/RecommendationPage';
+import { ComparePage } from '../features/recommendations/ComparePage';
+import { ArrivalPage } from '../features/recommendations/ArrivalPage';
 const MapSearchPage = lazy(() => import('../features/search/MapSearchPage').then(module => ({ default: module.MapSearchPage })));
 
 function RouteEffects() {
@@ -34,7 +37,10 @@ export function App() {
         <Route path="/route" element={<RouteSearchPage />} />
         <Route path="/map" element={<Suspense fallback={<LoadingState label="지도를 준비하고 있습니다." />}><MapSearchPage /></Suspense>} />
         <Route path="/location" element={<LocationPage />} />
-        {screens.filter(s => s.audience === 'mobile' && !['/', '/route', '/map', '/location'].includes(s.path)).map(screen =>
+        <Route path="/recommendations" element={<RecommendationPage />} />
+        <Route path="/recommendations/arrival" element={<ArrivalPage />} />
+        <Route path="/compare" element={<ComparePage />} />
+        {screens.filter(s => s.audience === 'mobile' && !['/', '/route', '/map', '/location', '/recommendations', '/recommendations/arrival', '/compare'].includes(s.path)).map(screen =>
           <Route key={screen.id} path={screen.path} element={<PlaceholderPage screen={screen} />} />)}
         <Route path="/settings" element={<PlaceholderPage screen={settingsScreen} />} />
         {import.meta.env.DEV && <Route path="/dev/ui" element={<ComponentGallery />} />}
