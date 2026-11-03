@@ -5,6 +5,7 @@ import { config } from '../../config/env';
 import { loadKakaoMaps } from './kakaoSdk';
 import type { Bounds, Coordinates, StationSummary } from './contracts';
 import { statusTone } from './searchUtils';
+import { usePreferences } from '../personalization/preferences';
 
 interface Props {
   stations: StationSummary[]; center: Coordinates; position: Coordinates | null; selectedId: number | null;
@@ -12,6 +13,7 @@ interface Props {
 }
 
 export function StationMap({ stations, center, position, selectedId, onSelect, onBoundsChange, onAvailabilityChange }: Props) {
+  const { operatorIds } = usePreferences();
   const container = useRef<HTMLDivElement>(null);
   const initialCenter = useRef(center);
   const [map, setMap] = useState<kakao.maps.Map | null>(null);
@@ -56,7 +58,7 @@ export function StationMap({ stations, center, position, selectedId, onSelect, o
       for (const group of groups.values()) {
         const station = group[0]; const cluster = group.length > 1;
         const button = document.createElement('button'); button.type = 'button';
-        button.className = `station-marker ${cluster ? 'station-marker--cluster' : `station-marker--${statusTone(station)}`} ${group.some(s => s.stationId === selectedId) ? 'station-marker--selected' : ''}`;
+        button.className = `station-marker ${cluster ? 'station-marker--cluster' : `station-marker--${statusTone(station)}`} ${!cluster && station.busiId && operatorIds.includes(station.busiId) ? 'station-marker--preferred' : ''} ${group.some(s => s.stationId === selectedId) ? 'station-marker--selected' : ''}`;
         button.textContent = cluster ? String(group.length) : statusTone(station) === 'neutral' ? '?' : String(station.availableCount);
         button.setAttribute('aria-label', cluster ? `충전소 ${group.length}곳 확대` : `${station.name} 선택`);
         button.onclick = () => {
@@ -69,7 +71,7 @@ export function StationMap({ stations, center, position, selectedId, onSelect, o
     };
     draw(); kakao.maps.event.addListener(map, 'idle', draw);
     return () => { kakao.maps.event.removeListener(map, 'idle', draw); overlays.forEach(overlay => overlay.setMap(null)); };
-  }, [map, stations, selectedId, onSelect]);
+  }, [map, stations, selectedId, onSelect, operatorIds]);
 
   useEffect(() => {
     if (!map || !position) return;

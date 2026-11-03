@@ -13,6 +13,7 @@ import './styles/layouts.css';
 import './features/search/search.css';
 import './features/recommendations/recommendations.css';
 import './features/stations/stations.css';
+import './features/personalization/personalization.css';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

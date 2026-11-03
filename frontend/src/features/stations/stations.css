@@ -1,6 +1,9 @@
 .station-detail-page .card { min-width: 0; }
 .station-detail-page .card h2 { overflow-wrap: anywhere; }
 .station-detail-page .card .small svg { vertical-align: middle; }
+.station-favorite { min-width: 40px; min-height: 40px; display: grid; place-items: center; background: transparent; color: var(--color-text-muted); border: 0; border-radius: var(--radius-sm); }
+.station-favorite--active { color: var(--color-warning); }
+.station-favorite:hover { background: var(--color-warning-soft); }
 .charger-summary-count { color: var(--color-primary); font-size: var(--text-sm); white-space: nowrap; }
 .charger-alert { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-radius: var(--radius-md); font-size: var(--text-sm); }
 .charger-alert--danger { background: var(--color-danger-soft); color: var(--color-danger); }
