@@ -7,11 +7,12 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * 기준 데이터 적재 설정 (명세 4.7).
  *
  * @param loadOnStartup true면 앱 시작 시 기준 데이터와 매핑을 적재한다
- * @param location      CSV 위치. route.csv, rest_area.csv, interchange.csv, station_access.csv
+ * @param location      CSV 위치. route.csv, rest_area.csv, interchange.csv, station_access.csv, ic_exclude.csv
  * @param icAutoMapping        true면 적재할 때 IC 인근 충전소 자동 매핑(AUTO)을 다시 만든다 (FR-46)
  * @param icRadiusKm           IC에서 충전소까지 최대 직선거리
  * @param icMaxPerIc           IC 한 곳에 매핑할 최대 충전소 수 (가까운 순)
  * @param icExcludeNamePattern 이름이 이 정규식에 맞으면 제외 (공동주택 등, 대소문자 무시)
+ * @param icExcludeRestrictionPattern 이용 제한 설명·이용 시간이 이 정규식에 맞으면 제외 (버스 전용·외부인 불가 등)
  */
 @ConfigurationProperties(prefix = "evision.reference")
 public record ReferenceProperties(
@@ -20,5 +21,6 @@ public record ReferenceProperties(
         @DefaultValue("true") boolean icAutoMapping,
         @DefaultValue("2.0") double icRadiusKm,
         @DefaultValue("3") int icMaxPerIc,
-        @DefaultValue("아파트|APT|빌라|오피스텔") String icExcludeNamePattern) {
+        @DefaultValue("아파트|APT|빌라|오피스텔|회원 ?전용") String icExcludeNamePattern,
+        @DefaultValue("버스 ?전용|외부인|거주자|입주민|직원|관계자|비공용") String icExcludeRestrictionPattern) {
 }

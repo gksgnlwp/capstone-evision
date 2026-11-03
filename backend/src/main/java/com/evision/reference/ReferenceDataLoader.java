@@ -9,6 +9,7 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -29,6 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
  *   <li>rest_area.csv: 전국휴게소정보표준데이터 (공공데이터포털 15025446). 고속국도만 적재</li>
  *   <li>interchange.csv: 고속도로 출입시설 위치정보 (15112762). 노선코드 = 노선번호 × 10 + 구간번호</li>
  *   <li>station_access.csv: 사람이 검증한 충전소-접근지점 매핑. 이 파일이 MANUAL 매핑의 기준이다</li>
+ *   <li>ic_exclude.csv: 사람이 확인해 IC 자동 매핑에서 뺄 비공용 충전소 (버스 차고지·입주민 전용 등)</li>
  * </ul>
  * 휴게소 매핑을 적재한 뒤 IC 인근 충전소 자동 매핑(AUTO)을 다시 만든다 ({@link IcAutoMapper}).
  */
@@ -74,14 +76,14 @@ public class ReferenceDataLoader {
             int interchangesSkipped, int accessUpserted, int accessRemoved, int icAutoMapped, int icAutoRemoved) {
     }
 
-    /** 설정된 위치의 CSV 네 개와 IC 자동 매핑을 한 트랜잭션으로 적재한다. 매핑 파일에 오류가 하나라도 있으면 전체를 롤백한다. */
+    /** 설정된 위치의 CSV 다섯 개와 IC 자동 매핑을 한 트랜잭션으로 적재한다. 매핑 파일에 오류가 하나라도 있으면 전체를 롤백한다. */
     @Transactional
     public LoadReport loadAll() {
         int routes = loadRoutes(readCsv("route.csv"));
         int[] restAreas = loadRestAreas(readCsv("rest_area.csv"));
         int[] interchanges = loadInterchanges(readCsv("interchange.csv"));
         int[] access = loadStationAccess(readCsv("station_access.csv"));
-        IcAutoMapper.Result ic = icAutoMapper.rebuild();
+        IcAutoMapper.Result ic = icAutoMapper.rebuild(loadIcExclusions(readCsv("ic_exclude.csv")));
         LoadReport report = new LoadReport(routes, restAreas[0], restAreas[1], interchanges[0], interchanges[1],
                 access[0], access[1], ic.mapped(), ic.removed());
         log.info("기준 데이터 적재 완료: {}", report);
@@ -226,6 +228,31 @@ public class ReferenceDataLoader {
                 });
         stale.forEach(id -> jdbc.update("DELETE FROM station_access WHERE access_id = ?", id));
         return new int[] {resolved.size(), stale.size()};
+    }
+
+    /**
+     * IC 자동 매핑에서 뺄 충전소 목록을 읽는다. 왜 뺐는지 남기도록 reason을 필수로 한다.
+     * DB에 없는 stat_id는 오류로 보지 않는다 (충전소가 삭제돼도 파일을 바로 고치지 않아도 되게).
+     */
+    List<String> loadIcExclusions(List<Map<String, String>> rows) {
+        List<String> errors = new ArrayList<>();
+        Set<String> statIds = new LinkedHashSet<>();
+        int line = 1;
+        for (Map<String, String> row : rows) {
+            line++;
+            String statId = blankToNull(row.get("stat_id"));
+            if (statId == null || statId.contains(",")) {
+                errors.add(line + "행: stat_id가 비어 있거나 잘못되었습니다 (" + row.get("stat_id") + ")");
+            } else if (blankToNull(row.get("reason")) == null) {
+                errors.add(line + "행: reason(제외 이유)이 필요합니다 (stat_id=" + statId + ")");
+            } else {
+                statIds.add(statId);
+            }
+        }
+        if (!errors.isEmpty()) {
+            throw new ReferenceDataException("ic_exclude.csv 오류 " + errors.size() + "건:\n  " + String.join("\n  ", errors));
+        }
+        return List.copyOf(statIds);
     }
 
     private record AccessRow(long stationId, String accessType, Long restAreaId, Long icId, BigDecimal detourKm,

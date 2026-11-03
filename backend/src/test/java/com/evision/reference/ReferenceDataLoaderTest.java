@@ -127,6 +127,22 @@ class ReferenceDataLoaderTest {
         assertThat(db.count("station_access")).isEqualTo(1);   // 기존 매핑은 그대로
     }
 
+    @Test
+    void IC_제외_목록은_중복을_합치고_이유가_없으면_모든_오류를_알려준다() {
+        assertThat(loader.loadIcExclusions(List.of(
+                exclusion("JA270016", "버스 차고지"), exclusion("JA270016", "버스 차고지"), exclusion("ME999999", "입주민 전용"))))
+                .containsExactly("JA270016", "ME999999");   // DB에 없는 충전소도 오류로 보지 않는다
+
+        assertThatThrownBy(() -> loader.loadIcExclusions(List.of(exclusion("JA270016", ""), exclusion("", "이유"))))
+                .isInstanceOf(ReferenceDataException.class)
+                .hasMessageContaining("2건")
+                .hasMessageContaining("reason");
+    }
+
+    private static Map<String, String> exclusion(String statId, String reason) {
+        return Map.of("stat_id", statId, "reason", reason);
+    }
+
     private static Map<String, String> access(String statId, String type, String target, String detour, String verifiedAt) {
         return Map.of("stat_id", statId, "access_type", type, "target_key", target,
                 "detour_km", detour, "verified_at", verifiedAt);

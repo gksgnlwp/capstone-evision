@@ -22,12 +22,16 @@ import com.evision.support.TestDb;
  *   A 0.56km  B 1.11km  C 1.67km  D 1.89km  → 가까운 3곳(A·B·C)만
  *   E 3.33km                                  → 2km 밖
  *   F 아파트 / G 이용 제한 / H 24시간 아님 / I 완속만 / J 휴게소 매핑됨 / K 삭제됨  → 제외
+ *   M 제한 설명 '버스전용' / N 이용 시간 '비공용' / O 이름 '회원 전용' / P 제외 목록  → 제외 (모두 A보다 가까움)
  *   L JCT 옆                                  → JCT는 매핑하지 않음
  * </pre>
  */
 @SpringBootTest
 @Import(TestcontainersConfiguration.class)
 class IcAutoMapperTest {
+
+    /** P(택시 차고지)는 이용 제한 문구가 없어 사람이 확인한 제외 목록으로만 뺀다 */
+    static final List<String> EXCLUDED = List.of("P0000001");
 
     @Autowired
     IcAutoMapper mapper;
@@ -67,11 +71,42 @@ class IcAutoMapperTest {
                 VALUES (?, 'REST_AREA', ?, 'MANUAL', now())""", j, restArea);
         station("K0000001", "삭제됨", 36.8006, "24시간 이용가능", "N", true, true);
         stationAt("L0000001", "JCT 옆", 36.501, 127.500);
+        restricted("M0000001", "세운버스", "24시간 이용가능", "버스전용 충전시설 (Combo2)");
+        restricted("N0000001", "운수 세차장", "비공용충전기(24시이용가능)", null);
+        restricted("O0000001", "산단공영주차장(회원 전용)", "24시간 이용가능", null);
+        restricted("P0000001", "택시 차고지", "24시간 이용가능", null);
+    }
+
+    @Test
+    void 비공용_문구가_있거나_제외_목록에_있는_충전소는_매핑하지_않는다() {
+        mapper.rebuild(EXCLUDED);
+
+        assertThat(autoStations()).containsExactly(a, b, c);
+    }
+
+    @Test
+    void 제외_목록에서_빠지면_다시_매핑한다() {
+        mapper.rebuild(EXCLUDED);
+        mapper.rebuild(List.of());
+
+        assertThat(jdbc.queryForObject("""
+                SELECT s.stat_id FROM station_access a JOIN station s ON s.station_id = a.station_id
+                WHERE a.access_type = 'IC' ORDER BY a.detour_km, s.stat_id LIMIT 1""", String.class))
+                .isEqualTo("P0000001");
+    }
+
+    @Test
+    void 이용_제한_가능성만_적힌_공용_충전소는_그대로_매핑한다() {
+        jdbc.update("UPDATE station SET limit_detail = '시설 상황에 따라 이용이 제한될 수 있음' WHERE station_id = ?", a);
+
+        mapper.rebuild(EXCLUDED);
+
+        assertThat(autoStations()).containsExactly(a, b, c);
     }
 
     @Test
     void 조건에_맞는_충전소를_IC당_가까운_3곳까지_매핑한다() {
-        IcAutoMapper.Result result = mapper.rebuild();
+        IcAutoMapper.Result result = mapper.rebuild(EXCLUDED);
 
         assertThat(result.mapped()).isEqualTo(3);
         assertThat(autoStations()).containsExactly(a, b, c);
@@ -86,8 +121,8 @@ class IcAutoMapperTest {
 
     @Test
     void 다시_실행하면_AUTO만_새로_만들어_중복이_없다() {
-        mapper.rebuild();
-        IcAutoMapper.Result second = mapper.rebuild();
+        mapper.rebuild(EXCLUDED);
+        IcAutoMapper.Result second = mapper.rebuild(EXCLUDED);
 
         assertThat(second.removed()).isEqualTo(3);
         assertThat(second.mapped()).isEqualTo(3);
@@ -100,7 +135,7 @@ class IcAutoMapperTest {
                 INSERT INTO station_access (station_id, access_type, ic_id, detour_km, mapping_method, verified_at)
                 VALUES (?, 'IC', ?, 1.0, 'MANUAL', now())""", a, ic);
 
-        mapper.rebuild();
+        mapper.rebuild(EXCLUDED);
 
         assertThat(jdbc.queryForObject("""
                 SELECT mapping_method FROM station_access WHERE station_id = ? AND access_type = 'IC'""",
@@ -125,6 +160,16 @@ class IcAutoMapperTest {
                 INSERT INTO charger (station_id, chger_id, charger_type, is_fast) VALUES (?, '01', '04', ?)""",
                 id, fast);
         return id;
+    }
+
+    /** A(0.56km)보다 가까운 곳에 둔다. 거르지 못하면 가까운 3곳 안에 들어온다 */
+    private void restricted(String statId, String name, String useTime, String limitDetail) {
+        long id = id("""
+                INSERT INTO station (stat_id, name, address, latitude, longitude, zcode, busi_id,
+                                     use_time, limit_yn, limit_detail, updated_at)
+                VALUES (?, ?, '주소', 36.8002, 127.100, '44', 'ME', ?, 'N', ?, now()) RETURNING station_id""",
+                statId, name, useTime, limitDetail);
+        jdbc.update("INSERT INTO charger (station_id, chger_id, charger_type, is_fast) VALUES (?, '01', '04', true)", id);
     }
 
     private void stationAt(String statId, String name, double lat, double lng) {
