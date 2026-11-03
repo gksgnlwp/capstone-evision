@@ -11,6 +11,7 @@ import './styles/global.css';
 import './styles/components.css';
 import './styles/layouts.css';
 import './features/search/search.css';
+import './features/recommendations/recommendations.css';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
