@@ -18,7 +18,7 @@ type SampleStation = StationSummary & { chargerTypes: string[] };
 function station(stationId: number, name: string, lat: number, lng: number, accesses: AccessPoint[], available: number, total: number, busiId = 'ME', unknown = 0): SampleStation {
   return { stationId, statId: `SAMPLE${stationId}`, name, busiId, lat, lng, accesses,
     fastChargerCount: total, availableCount: available, chargingCount: total - available - unknown,
-    unavailableCount: 0, unknownCount: unknown, latestStatusUpdatedAt: unknown === total ? null : '2026-10-28T14:05:00',
+    unavailableCount: 0, unknownCount: unknown, latestStatusUpdatedAt: unknown === total ? null : new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 19),
     chargerTypes: stationId % 3 === 0 ? ['04', '06'] : ['04', '01', '03', '05'] };
 }
 export const sampleStations: SampleStation[] = [

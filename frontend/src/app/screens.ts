@@ -32,7 +32,7 @@ export const screens: ScreenDefinition[] = [
 ];
 
 export const settingsScreen: ScreenDefinition = {
-  id: 'SETTINGS', path: '/settings', title: '설정', description: '선호 기관과 브라우저 저장 설정 관리',
+  id: 'SETTINGS', path: '/settings', title: '선호 운영기관', description: '선호 기관과 브라우저 저장 설정 관리',
   phase: 5, audience: 'mobile', useCases: ['U03', 'U11'],
 };
 

@@ -1,10 +1,11 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { MapPin, Phone, RefreshCw } from 'lucide-react';
+import { MapPin, Phone, RefreshCw, Star } from 'lucide-react';
 import { Badge, Button, EmptyState, ErrorState, LoadingState, StatusBadge } from '../../components/ui';
 import { useAsync } from '../../hooks/useAsync';
 import { stationService } from './stationService';
 import { chargerTypeLabel, detailAccessLabel, detailStatusTime, isStatusDelayed } from './stationUtils';
+import { toggleFavorite, usePreferences } from '../personalization/preferences';
 
 export function StationDetailPage() {
   const { stationId: rawId } = useParams();
@@ -15,6 +16,15 @@ export function StationDetailPage() {
 }
 
 function DetailContent({ stationId }: { stationId: number }) {
+  const { favoriteIds, favoritePersistent } = usePreferences();
+  const [favoriteMessage, setFavoriteMessage] = useState('');
+  const [favoriteLimitReached, setFavoriteLimitReached] = useState(false);
+  const isFavorite = favoriteIds.includes(stationId);
+  function onFavorite() {
+    const result = toggleFavorite(stationId);
+    setFavoriteLimitReached(result === 'limit');
+    setFavoriteMessage(result === 'limit' ? '즐겨찾기는 최대 20개까지 저장할 수 있어요.' : result === 'added' ? '즐겨찾기에 추가했어요.' : '즐겨찾기에서 해제했어요.');
+  }
   const loader = useCallback((signal: AbortSignal) => stationService.detail(stationId, signal), [stationId]);
   const result = useAsync(loader);
   if (result.status === 'loading') return <LoadingState label="충전소 정보를 불러오고 있습니다." />;
@@ -34,7 +44,9 @@ function DetailContent({ stationId }: { stationId: number }) {
     { key: 'unknown', label: '미확인', count: unknown },
   ];
   return <>
-    <section className="card stack"><div className="row between"><div><p className="eyebrow">EVISION 충전소</p><h2>{station.name}</h2></div><Button variant="ghost" className="compact-button" onClick={result.retry} aria-label="충전소 정보 새로고침"><RefreshCw size={18} /></Button></div>
+    <section className="card stack"><div className="row between"><div><p className="eyebrow">EVISION 충전소</p><h2>{station.name}</h2></div><div className="row"><button type="button" className={`station-favorite ${isFavorite ? 'station-favorite--active' : ''}`} aria-pressed={isFavorite} aria-label={isFavorite ? '즐겨찾기 해제' : '즐겨찾기 추가'} onClick={onFavorite}><Star size={21} fill={isFavorite ? 'currentColor' : 'none'} aria-hidden="true" /></button><Button variant="ghost" className="compact-button" onClick={result.retry} aria-label="충전소 정보 새로고침"><RefreshCw size={18} /></Button></div></div>
+      {favoriteMessage && <p role="status" className="small muted">{favoriteMessage} {favoriteLimitReached && <Link className="text-link" to="/favorites">즐겨찾기 정리하기</Link>}</p>}
+      {!favoritePersistent && <p className="small muted">브라우저 저장소를 사용할 수 없어 즐겨찾기는 현재 접속 동안만 유지됩니다. 새로고침하면 사라질 수 있어요.</p>}
       <p className="small muted"><MapPin size={14} aria-hidden="true" /> {station.address || '주소 정보 없음'} {station.addressDetail || ''}</p>
       <div className="row wrap">{station.accesses.map((access, index) => <Badge key={`${access.accessType}-${access.restAreaId || access.icId}-${index}`} tone={access.accessType === 'REST_AREA' ? 'success' : 'info'}>{detailAccessLabel(access)}</Badge>)}</div>
     </section>

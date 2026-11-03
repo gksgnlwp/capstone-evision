@@ -17,6 +17,8 @@ import { StationDetailPage } from '../features/stations/StationDetailPage';
 import { ChargerHistoryPage } from '../features/stations/ChargerHistoryPage';
 import { PredictionPage, PatternPage } from '../features/stations/PredictionPage';
 import { PredictionUnavailablePage } from '../features/stations/PredictionUnavailablePage';
+import { OperatorPage } from '../features/personalization/OperatorPage';
+import { FavoritesPage } from '../features/personalization/FavoritesPage';
 const MapSearchPage = lazy(() => import('../features/search/MapSearchPage').then(module => ({ default: module.MapSearchPage })));
 
 function RouteEffects() {
@@ -49,9 +51,11 @@ export function App() {
         <Route path="/stations/:stationId/patterns" element={<PatternPage />} />
         <Route path="/stations/:stationId/chargers/:chargerId/history" element={<ChargerHistoryPage />} />
         <Route path="/stations/:stationId/prediction-unavailable" element={<PredictionUnavailablePage />} />
-        {screens.filter(s => s.audience === 'mobile' && !['/', '/route', '/map', '/location', '/recommendations', '/recommendations/arrival', '/compare', '/stations/:stationId', '/stations/:stationId/prediction', '/stations/:stationId/patterns', '/stations/:stationId/chargers/:chargerId/history', '/stations/:stationId/prediction-unavailable'].includes(s.path)).map(screen =>
+        <Route path="/favorites" element={<FavoritesPage />} />
+        <Route path="/settings/operators" element={<OperatorPage />} />
+        {screens.filter(s => s.audience === 'mobile' && !['/', '/route', '/map', '/location', '/recommendations', '/recommendations/arrival', '/compare', '/stations/:stationId', '/stations/:stationId/prediction', '/stations/:stationId/patterns', '/stations/:stationId/chargers/:chargerId/history', '/stations/:stationId/prediction-unavailable', '/favorites', '/settings/operators'].includes(s.path)).map(screen =>
           <Route key={screen.id} path={screen.path} element={<PlaceholderPage screen={screen} />} />)}
-        <Route path="/settings" element={<PlaceholderPage screen={settingsScreen} />} />
+        <Route path="/settings" element={<OperatorPage />} />
         {import.meta.env.DEV && <Route path="/dev/ui" element={<ComponentGallery />} />}
         <Route path="*" element={<EmptyState title="페이지를 찾을 수 없어요" description="주소를 확인하거나 홈으로 이동해 주세요." action={<Link className="button button--secondary" to="/">홈으로 이동</Link>} />} />
       </Route>
