@@ -19,6 +19,7 @@ import { PredictionPage, PatternPage } from '../features/stations/PredictionPage
 import { PredictionUnavailablePage } from '../features/stations/PredictionUnavailablePage';
 import { OperatorPage } from '../features/personalization/OperatorPage';
 import { FavoritesPage } from '../features/personalization/FavoritesPage';
+import { AdminAccess, AdminLoginPage, CollectionPage, StatisticsPage, AccuracyPage, MappingsPage, ModelsPage, AdminNotFound } from '../features/admin/AdminPages';
 const MapSearchPage = lazy(() => import('../features/search/MapSearchPage').then(module => ({ default: module.MapSearchPage })));
 
 function RouteEffects() {
@@ -61,9 +62,13 @@ export function App() {
       </Route>
       <Route path="/admin" element={<AdminLayout />}>
         <Route index element={<Navigate to="/admin/login" replace />} />
-        {screens.filter(s => s.audience === 'admin').map(screen =>
-          <Route key={screen.id} path={screen.path} element={<PlaceholderPage screen={screen} />} />)}
-        <Route path="*" element={<EmptyState title="운영 페이지를 찾을 수 없어요" action={<Link to="/admin/login" className="text-link">운영자 화면으로 이동</Link>} />} />
+        <Route path="login" element={<AdminLoginPage />} />
+        <Route path="collection" element={<AdminAccess><CollectionPage /></AdminAccess>} />
+        <Route path="statistics" element={<AdminAccess><StatisticsPage /></AdminAccess>} />
+        <Route path="accuracy" element={<AdminAccess><AccuracyPage /></AdminAccess>} />
+        <Route path="mappings" element={<AdminAccess><MappingsPage /></AdminAccess>} />
+        <Route path="models" element={<AdminAccess><ModelsPage /></AdminAccess>} />
+        <Route path="*" element={<AdminNotFound />} />
       </Route>
     </Routes>
   </LocationProvider>;

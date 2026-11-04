@@ -1,14 +1,14 @@
 import { Link, NavLink, Outlet } from 'react-router-dom';
-import { Activity, BarChart3, BrainCircuit, Database, Gauge, LogIn, ArrowUpRight, Zap } from 'lucide-react';
+import { Activity, BarChart3, BrainCircuit, Database, Gauge, ArrowUpRight, Zap } from 'lucide-react';
 import { screens } from '../app/screens';
 import { EnvironmentBadge } from '../components/EnvironmentBadge';
 
-const icons = [LogIn, Activity, BarChart3, Gauge, Database, BrainCircuit];
+const icons = [Activity, BarChart3, Gauge, Database, BrainCircuit];
 export function AdminLayout() {
   return <div className="admin-shell">
     <aside className="admin-sidebar">
       <Link to="/admin" className="admin-brand"><Zap size={24} aria-hidden="true" /><span>EVISION<small>OPERATIONS</small></span></Link>
-      <nav aria-label="운영 메뉴">{screens.filter(s => s.audience === 'admin').map((screen, i) => {
+      <nav aria-label="운영 메뉴">{screens.filter(s => s.audience === 'admin' && s.id !== 'D00').map((screen, i) => {
         const Icon = icons[i];
         return <NavLink key={screen.id} to={screen.path} className={({ isActive }) => `admin-nav-item ${isActive ? 'is-active' : ''}`}><Icon size={18} aria-hidden="true" />{screen.title}</NavLink>;
       })}</nav>
