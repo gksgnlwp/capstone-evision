@@ -22,7 +22,7 @@ spring:
   task:
     scheduling:
       pool:
-        size: 2                # 기본정보 갱신(수십 분)이 5분 상태 수집을 막지 않게
+        size: 3                # 기본정보 갱신(수십 분)·이력 정리(첫 실행 5시간)가 동시에 돌아도 5분 상태 수집이 막히지 않게
 
 evision:
   evcharger:
