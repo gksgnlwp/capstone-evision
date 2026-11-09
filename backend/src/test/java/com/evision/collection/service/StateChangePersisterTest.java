@@ -4,8 +4,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -128,6 +132,44 @@ class StateChangePersisterTest {
 
         assertThat(db.count("charger_status_history")).isZero();
         assertThat(current(chargerA).get("current_status_code")).isNull();
+    }
+
+    @Test
+    void 두_수집이_반대_순서로_동시에_저장해도_교착이_나지_않는다() {
+        long stationId = db.station("ME000002");
+        List<Long> chargers = new ArrayList<>();
+        for (int i = 0; i < 40; i++) {
+            chargers.add(db.charger(stationId, "%02d".formatted(i)));
+        }
+
+        for (int round = 0; round < 5; round++) {
+            LocalDateTime updatedAt = T1.plusMinutes(round);
+            List<NormalizedState> forward = new ArrayList<>(
+                    chargers.stream().map(id -> state(id, "2", updatedAt)).toList());
+            List<NormalizedState> backward = new ArrayList<>(forward);
+            Collections.reverse(backward);
+
+            CountDownLatch start = new CountDownLatch(1);
+            CompletableFuture<PersistResult> first = persistAfter(start, forward);
+            CompletableFuture<PersistResult> second = persistAfter(start, backward);
+            start.countDown();
+
+            PersistResult a = first.join();
+            PersistResult b = second.join();
+            assertThat(a.insertedCount() + b.insertedCount()).isEqualTo(40);
+        }
+    }
+
+    private CompletableFuture<PersistResult> persistAfter(CountDownLatch start, List<NormalizedState> states) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                start.await();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException(e);
+            }
+            return persister.persist(runId, states, COLLECTED_AT);
+        });
     }
 
     private int historyCount(long chargerId) {
