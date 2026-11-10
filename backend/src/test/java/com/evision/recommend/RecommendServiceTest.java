@@ -72,7 +72,7 @@ class RecommendServiceTest {
                 icAccess(s1, route, 36.6, 127.0, "0"),
                 restAreaAccess(s2, route, 35.9, 127.0, "0"),
                 icAccess(s3, route, 36.5, 127.0, "2"));
-        when(repository.findCandidateAccesses(anyLong(), any(), any())).thenReturn(accesses);
+        when(repository.findCandidateAccesses(anyLong(), any(), any(), eq(NOW))).thenReturn(accesses);
         when(stationQueryRepository.countFastChargersByStatus(anyCollection())).thenReturn(List.of(
                 new StatusCountRow(1L, NormalizedStatus.CHARGING, 2L, NOW),
                 new StatusCountRow(3L, NormalizedStatus.AVAILABLE, 2L, NOW)));
@@ -164,7 +164,7 @@ class RecommendServiceTest {
 
     @Test
     void 후보가_없으면_빈_목록() {
-        when(repository.findCandidateAccesses(anyLong(), any(), any())).thenReturn(List.of());
+        when(repository.findCandidateAccesses(anyLong(), any(), any(), any())).thenReturn(List.of());
 
         RecommendResponse r = service.recommend(condition(100, null));
 

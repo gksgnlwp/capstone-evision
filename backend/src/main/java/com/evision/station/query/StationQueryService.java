@@ -1,5 +1,6 @@
 package com.evision.station.query;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -18,11 +19,16 @@ import com.evision.collection.service.ChargerStatusCodes;
 import com.evision.common.code.NormalizedStatus;
 import com.evision.common.error.ApiException;
 import com.evision.station.domain.Station;
-import com.evision.station.query.StationQueryRepository.StatusCountRow;
+import com.evision.station.query.StationQueryRepository.ChargerStateRow;
 import com.evision.station.query.StationSearchResponse.StationSummary;
+import com.evision.station.reliability.ChargerReliability;
+import com.evision.station.reliability.ChargerReliabilityPolicy;
+import com.evision.station.reliability.StationReliability;
 
 /**
  * 조회 API (명세 6.2~6.4). 검색·상세는 이력 테이블을 보지 않고 charger.current_* 만 쓴다.
+ * 충전기마다 정상·의심·고장·점검·확인 불가를 조회할 때 판정하고({@link ChargerReliabilityPolicy}),
+ * 오류 충전기는 사용가능·충전중 대수에서 뺀다.
  */
 @Service
 @Transactional(readOnly = true)
@@ -33,12 +39,22 @@ public class StationQueryService {
     static final int MAX_HISTORY_SIZE = 500;
     static final int MAX_SUMMARY_IDS = 20;
 
+    /** 검색 결과 정렬: 믿을 수 있는 충전소부터, 같으면 stationId 순 */
+    static final Comparator<StationSummary> RELIABLE_FIRST = Comparator
+            .comparing(StationSummary::reliability)
+            .thenComparingLong(StationSummary::stationId);
+
     private final StationQueryRepository repository;
     private final ChargerStatusCodes statusCodes;
+    private final ChargerReliabilityPolicy reliabilityPolicy;
+    private final Clock clock;
 
-    public StationQueryService(StationQueryRepository repository, ChargerStatusCodes statusCodes) {
+    public StationQueryService(StationQueryRepository repository, ChargerStatusCodes statusCodes,
+            ChargerReliabilityPolicy reliabilityPolicy, Clock clock) {
         this.repository = repository;
         this.statusCodes = statusCodes;
+        this.reliabilityPolicy = reliabilityPolicy;
+        this.clock = clock;
     }
 
     /** FR-06 노선 목록. 충전소가 매핑된 노선만, 노선번호 순. 쿼리 2회. */
@@ -101,13 +117,18 @@ public class StationQueryService {
         return new OperatorListResponse(operators);
     }
 
-    /** OP-01 충전소 검색. 쿼리 수는 결과 건수와 관계없이 3회 (충전소, 접근지점, 상태 집계). */
+    /**
+     * OP-01 충전소 검색. 쿼리 수는 결과 건수와 관계없이 4회 (충전소, 접근지점, 충전기 상태, 마지막 수집 시각).
+     * 믿을 수 있는 충전소부터 정렬한다 (limit으로 자른 뒤 정렬).
+     */
     public StationSearchResponse search(StationSearchCondition c) {
+        LocalDateTime now = LocalDateTime.now(clock);
         List<Station> found = repository.searchStations(c, c.limit() + 1);
         boolean truncated = found.size() > c.limit();
         List<Station> stations = truncated ? found.subList(0, c.limit()) : found;
+        LocalDateTime collectedAt = repository.findLastStatusCollectedAt();
         if (stations.isEmpty()) {
-            return new StationSearchResponse(0, c.limit(), false, List.of());
+            return new StationSearchResponse(0, c.limit(), false, collectedAt, List.of());
         }
 
         List<Long> ids = stations.stream().map(Station::getId).toList();
@@ -115,18 +136,20 @@ public class StationQueryService {
                 .findAccesses(ids, c.routeId(), c.direction(), c.accessType()).stream()
                 .collect(Collectors.groupingBy(a -> a.getStation().getId(),
                         Collectors.mapping(AccessPointView::from, Collectors.toList())));
-        Map<Long, List<StatusCountRow>> counts = repository.countFastChargersByStatus(ids).stream()
-                .collect(Collectors.groupingBy(StatusCountRow::stationId));
+        Map<Long, List<ChargerStateRow>> states = repository.findFastChargerStates(ids).stream()
+                .collect(Collectors.groupingBy(ChargerStateRow::stationId));
 
         List<StationSummary> summaries = stations.stream()
                 .map(s -> summarize(s, accesses.getOrDefault(s.getId(), List.of()),
-                        counts.getOrDefault(s.getId(), List.of())))
+                        states.getOrDefault(s.getId(), List.of()), now))
+                .sorted(RELIABLE_FIRST)
                 .toList();
-        return new StationSearchResponse(summaries.size(), c.limit(), truncated, summaries);
+        return new StationSearchResponse(summaries.size(), c.limit(), truncated, collectedAt, summaries);
     }
 
     /**
-     * FR-37 즐겨찾기 충전소 요약 (OP-108). 요청 순서대로, 중복 ID는 한 번만. 쿼리 3회 (충전소, 접근지점, 상태 집계).
+     * FR-37 즐겨찾기 충전소 요약 (OP-108). 요청 순서대로, 중복 ID는 한 번만.
+     * 쿼리 4회 (충전소, 접근지점, 충전기 상태, 마지막 수집 시각).
      * 운영 종료된 충전소는 빼지 않고 CLOSED로 알려 화면이 삭제를 안내하게 한다.
      */
     public StationSummaryListResponse summaries(List<Long> ids) {
@@ -134,6 +157,7 @@ public class StationQueryService {
             throw ApiException.invalidQuery("ids를 1개 이상 지정해야 합니다.");
         }
         List<Long> unique = ids.stream().distinct().toList();
+        LocalDateTime now = LocalDateTime.now(clock);
         if (unique.size() > MAX_SUMMARY_IDS) {
             throw ApiException.invalidQuery("ids는 최대 " + MAX_SUMMARY_IDS + "개입니다.");
         }
@@ -141,13 +165,13 @@ public class StationQueryService {
         Map<Long, Station> found = repository.findStationsIncludingDeleted(unique).stream()
                 .collect(Collectors.toMap(Station::getId, s -> s));
         Map<Long, List<AccessPointView>> accesses = Map.of();
-        Map<Long, List<StatusCountRow>> counts = Map.of();
+        Map<Long, List<ChargerStateRow>> states = Map.of();
         if (!found.isEmpty()) {
             accesses = repository.findAccesses(found.keySet(), null, null, null).stream()
                     .collect(Collectors.groupingBy(a -> a.getStation().getId(),
                             Collectors.mapping(AccessPointView::from, Collectors.toList())));
-            counts = repository.countFastChargersByStatus(found.keySet()).stream()
-                    .collect(Collectors.groupingBy(StatusCountRow::stationId));
+            states = repository.findFastChargerStates(found.keySet()).stream()
+                    .collect(Collectors.groupingBy(ChargerStateRow::stationId));
         }
 
         List<StationSummaryListResponse.Item> items = new ArrayList<>();
@@ -162,23 +186,31 @@ public class StationQueryService {
                     ? StationSummaryListResponse.ItemStatus.CLOSED
                     : StationSummaryListResponse.ItemStatus.ACTIVE;
             items.add(new StationSummaryListResponse.Item(id, status,
-                    summarize(s, accesses.getOrDefault(id, List.of()), counts.getOrDefault(id, List.of()))));
+                    summarize(s, accesses.getOrDefault(id, List.of()), states.getOrDefault(id, List.of()), now)));
         }
-        return new StationSummaryListResponse(items);
+        return new StationSummaryListResponse(repository.findLastStatusCollectedAt(), items);
     }
 
-    /** OP-02 충전소 상세 (UC-02·03). 쿼리 3회 (충전소, 접근지점, 충전기). */
+    /** OP-02 충전소 상세 (UC-02·03). 쿼리 4회 (충전소, 접근지점, 충전기, 마지막 수집 시각). */
     public StationDetailResponse detail(long stationId) {
         Station s = repository.findActiveStation(stationId)
                 .orElseThrow(() -> ApiException.notFound("충전소를 찾을 수 없습니다: " + stationId));
         List<AccessPointView> accesses = repository.findAccesses(List.of(stationId), null, null, null).stream()
                 .map(AccessPointView::from).toList();
+        LocalDateTime now = LocalDateTime.now(clock);
         List<StationDetailResponse.ChargerView> chargers = repository.findActiveChargers(stationId).stream()
-                .map(StationDetailResponse.ChargerView::from).toList();
+                .map(c -> StationDetailResponse.ChargerView.from(c, reliabilityPolicy.classify(
+                        c.getCurrentNormalizedStatus(), c.getCurrentStatusUpdatedAt(), now)))
+                .toList();
+        List<StationDetailResponse.ChargerView> fast = chargers.stream()
+                .filter(StationDetailResponse.ChargerView::fast).toList();
+        StationReliability reliability = fast.isEmpty() ? null : StationReliability.of(
+                (int) fast.stream().filter(c -> c.reliability() == ChargerReliability.NORMAL).count(), fast.size());
         return new StationDetailResponse(s.getId(), s.getStatId(), s.getName(), s.getAddress(),
                 s.getAddressDetail(), s.getLatitude(), s.getLongitude(), s.getBusiId(), s.getOrgName(),
                 s.getOperatorName(), s.getOperatorCall(), s.getUseTime(), s.getParkingFree(), s.getLimited(),
-                s.getLimitDetail(), s.getUpdatedAt(), accesses, chargers);
+                s.getLimitDetail(), s.getUpdatedAt(), repository.findLastStatusCollectedAt(), reliability,
+                accesses, chargers);
     }
 
     /** OP-19 충전기 상태 이력. offset 없이 keyset(cursor = 마지막 status_updated_at)으로 넘긴다. */
@@ -212,27 +244,34 @@ public class StationQueryService {
         return new ChargerHistoryResponse(chargerId, from, to, pageSize, items, next);
     }
 
-    private static StationSummary summarize(Station s, List<AccessPointView> accesses, List<StatusCountRow> rows) {
+    private StationSummary summarize(Station s, List<AccessPointView> accesses, List<ChargerStateRow> rows,
+            LocalDateTime now) {
         int available = 0;
         int charging = 0;
         int unavailable = 0;
         int unknown = 0;
+        int suspect = 0;
         LocalDateTime latest = null;
-        for (StatusCountRow r : rows) {
-            int n = r.count().intValue();
-            NormalizedStatus status = r.status() == null ? NormalizedStatus.UNKNOWN : r.status();
-            switch (status) {
-                case AVAILABLE -> available += n;
-                case CHARGING -> charging += n;
-                case UNAVAILABLE -> unavailable += n;
-                case UNKNOWN -> unknown += n;
+        for (ChargerStateRow r : rows) {
+            switch (reliabilityPolicy.classify(r.status(), r.updatedAt(), now)) {
+                case NORMAL -> {
+                    if (r.status() == NormalizedStatus.AVAILABLE) {
+                        available++;
+                    } else {
+                        charging++;
+                    }
+                }
+                case SUSPECT -> suspect++;
+                case FAULT -> unavailable++;
+                case UNKNOWN -> unknown++;
             }
-            if (r.latestUpdatedAt() != null && (latest == null || r.latestUpdatedAt().isAfter(latest))) {
-                latest = r.latestUpdatedAt();
+            if (r.updatedAt() != null && (latest == null || r.updatedAt().isAfter(latest))) {
+                latest = r.updatedAt();
             }
         }
+        int total = rows.size();
         return new StationSummary(s.getId(), s.getStatId(), s.getName(), s.getBusiId(), s.getLatitude(),
-                s.getLongitude(), accesses, available + charging + unavailable + unknown, available, charging,
-                unavailable, unknown, latest);
+                s.getLongitude(), accesses, total, available, charging, unavailable, unknown, suspect, latest,
+                StationReliability.of(available + charging, total));
     }
 }

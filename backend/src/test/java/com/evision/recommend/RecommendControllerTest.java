@@ -122,6 +122,32 @@ class RecommendControllerTest {
     }
 
     @Test
+    void 정상인_급속충전기가_없는_충전소는_추천하지_않는다() throws Exception {
+        // RA1에 S8(고장·확인 불가만), S9(충전중 7시간·사용가능 8일 그대로 = 의심만), S10(의심 1 + 정상 1)을 더한다
+        long ra1 = jdbc.queryForObject("SELECT rest_area_id FROM rest_area WHERE direction = '상행'", Long.class);
+        LocalDateTime now = LocalDateTime.now(clock);
+        long s8 = station("ST000008", false);
+        chargerUpdatedAt(s8, "01", "UNAVAILABLE", now);
+        chargerUpdatedAt(s8, "02", "UNKNOWN", now);
+        chargerUpdatedAt(s8, "03", null, null);
+        mapRestArea(s8, ra1);
+        long s9 = station("ST000009", false);
+        chargerUpdatedAt(s9, "01", "CHARGING", now.minusHours(7));
+        chargerUpdatedAt(s9, "02", "AVAILABLE", now.minusDays(8));
+        mapRestArea(s9, ra1);
+        long s10 = station("ST000010", false);
+        chargerUpdatedAt(s10, "01", "AVAILABLE", now.minusDays(8));
+        chargerUpdatedAt(s10, "02", "CHARGING", now.minusHours(1));
+        mapRestArea(s10, ra1);
+
+        mvc.perform(base())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.candidateCount").value(5))   // 기존 4곳 + S10
+                .andExpect(jsonPath("$.recommendations[?(@.statId == 'ST000008')]").isEmpty())
+                .andExpect(jsonPath("$.recommendations[?(@.statId == 'ST000009')]").isEmpty());
+    }
+
+    @Test
     void 방향을_주면_그_방향과_양방향_휴게소_그리고_IC만_본다() throws Exception {
         mvc.perform(base("direction", "상행"))
                 .andExpect(status().isOk())
@@ -248,7 +274,15 @@ class RecommendControllerTest {
                 INSERT INTO charger (station_id, chger_id, charger_type, output_kw, is_fast, del_yn,
                                      current_normalized_status, current_status_updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                stationId, chgerId, type, outputKw, fast, deleted ? "Y" : "N", normalized, T);
+                stationId, chgerId, type, outputKw, fast, deleted ? "Y" : "N", normalized,
+                LocalDateTime.now(clock).minusMinutes(10));
+    }
+
+    private void chargerUpdatedAt(long stationId, String chgerId, String normalized, LocalDateTime updatedAt) {
+        jdbc.update("""
+                INSERT INTO charger (station_id, chger_id, charger_type, output_kw, is_fast, del_yn,
+                                     current_normalized_status, current_status_updated_at)
+                VALUES (?, ?, '04', 100, true, 'N', ?, ?)""", stationId, chgerId, normalized, updatedAt);
     }
 
     private void forecast(String statId, LocalDateTime window, String p, String modelVersion,
