@@ -31,3 +31,5 @@
 .recommend-map-marker { display: inline-block; padding: 5px 9px; border-radius: var(--radius-pill); border: 2px solid white; background: var(--color-primary); color: white; box-shadow: 0 2px 8px rgb(23 44 48 / 25%); font: 700 11px var(--font-sans); white-space: nowrap; }
 .recommend-map-marker--ic { background: var(--color-info); }
 .arrival-page .card strong { font-size: var(--text-md); }
+.arrival-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.arrival-selection { padding: 10px 12px; border-radius: var(--radius-sm); background: var(--color-warning-soft); color: var(--color-warning); font-size: var(--text-xs); }
