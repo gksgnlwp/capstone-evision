@@ -22,6 +22,8 @@ public record RecommendResponse(
         List<Item> recommendations) {
 
     /**
+     * @param busiId                  운영기관 코드 (운영기관 목록·검색 응답의 busiId와 같음)
+     * @param orgName                 운영기관 이름 (원천에 없으면 null)
      * @param distanceKm              현재 위치 → 접근지점 추정 도로거리 (직선거리 × 보정계수)
      * @param availabilityProbability 도착 시 가용 확률
      * @param realtimeProbability     현재 상태 기준 가용 (1 / 0 / 판단 불가 null)
@@ -35,6 +37,8 @@ public record RecommendResponse(
             long stationId,
             String statId,
             String name,
+            String busiId,
+            String orgName,
             double latitude,
             double longitude,
             AccessPoint access,
