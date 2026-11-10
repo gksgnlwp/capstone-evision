@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { AlertTriangle, ArrowRight, Clock3, Download, FileUp, LockKeyhole, RefreshCw, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Clock3, Download, LockKeyhole, RefreshCw, ShieldCheck } from 'lucide-react';
 import { Badge, Button, EmptyState, ErrorState, LoadingState } from '../../components/ui';
 import { config } from '../../config/env';
 import { useAsync } from '../../hooks/useAsync';
@@ -32,14 +32,20 @@ export function AdminLoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const next = (location.state as { from?: string } | null)?.from;
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [loginMessage, setLoginMessage] = useState('');
   return <div className="admin-login-wrap"><div className="admin-login-card">
     <div className="admin-login-icon"><LockKeyhole size={24} aria-hidden="true" /></div>
     <h1>운영자 로그인</h1><p className="muted">수집 현황과 운영 지표를 확인하는 공간입니다.</p>
     {isDemo ? <><div className="admin-callout"><ShieldCheck size={19} aria-hidden="true" /><span>DEV 환경의 화면 시연입니다. 운영자 인증은 연결되지 않았습니다.</span></div>
       <Button fullWidth onClick={() => navigate(next?.startsWith('/admin/') ? next : '/admin/collection')}>시연 화면 보기 <ArrowRight size={16} aria-hidden="true" /></Button></>
-      : <><label className="admin-field">아이디<input disabled autoComplete="username" placeholder="운영자 계정" /></label>
-        <label className="admin-field">비밀번호<input disabled type="password" autoComplete="current-password" placeholder="비밀번호" /></label>
-        <Button fullWidth disabled>로그인</Button><p className="admin-form-note">운영자 인증 API와 접근 통제가 준비되면 로그인할 수 있습니다.</p></>}
+      : <form className="admin-login-form" onSubmit={event => { event.preventDefault(); setLoginMessage('운영자 로그인을 현재 사용할 수 없습니다.'); }}>
+        <label className="admin-field">아이디<input required autoComplete="username" placeholder="운영자 계정" value={username} onChange={event => setUsername(event.target.value)} /></label>
+        <label className="admin-field">비밀번호<input required type="password" autoComplete="current-password" placeholder="비밀번호" value={password} onChange={event => setPassword(event.target.value)} /></label>
+        <Button type="submit" fullWidth>로그인</Button>{loginMessage && <p role="alert" className="admin-input-error">{loginMessage}</p>}
+        <p className="admin-form-note">인증 기능 준비 중입니다. 입력한 계정 정보는 서버에 전송하거나 저장하지 않습니다.</p>
+      </form>}
   </div></div>;
 }
 
@@ -111,30 +117,6 @@ export function StatisticsPage() {
     {isDemo ? <><div className="admin-metric-grid"><Metric label="조회 거점" value={`${rows.length}곳`} detail="현재 필터 기준" /><Metric label="평균 점유율" value={rows.length ? `${(rows.reduce((sum, item) => sum + item.occupancy, 0) / rows.length).toFixed(1)}%` : '정보 없음'} detail="시연 데이터 평균" /><Metric label="평균 만차 비율" value={rows.length ? `${(rows.reduce((sum, item) => sum + item.full, 0) / rows.length).toFixed(1)}%` : '정보 없음'} detail="시연 데이터 평균" /></div>
       <Panel title="거점별 현황"><div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>거점</th><th>유형</th><th>노선</th><th>평균 점유율</th><th>만차 비율</th><th>관측 구간</th></tr></thead><tbody>{rows.map(item => <tr key={item.place}><td>{item.place}</td><td>{item.kind}</td><td>{item.route}</td><td>{item.occupancy}%</td><td>{item.full}%</td><td>{item.windows}개</td></tr>)}</tbody></table></div>{rows.length === 0 && <EmptyState title="조건에 맞는 거점이 없어요" />}</Panel></>
       : <PendingData description="거점별 점유율·만차 비율·CSV 조회 API가 연결되면 실제 통계를 표시합니다." />}
-  </div>;
-}
-
-export function AccuracyPage() {
-  return <div className="admin-page"><Heading title="예측 정확도" description="모델 성능을 평가 기간과 지표별로 확인합니다." />
-    {isDemo ? <><div className="admin-metric-grid"><Metric label="평균 절대 오차 · MAE" value="0.12" detail="점유율 예측 · 시연값" /><Metric label="정밀도" value="0.84" detail="만차 분류 · 시연값" /><Metric label="재현율" value="0.79" detail="만차 분류 · 시연값" /><Metric label="F1 점수" value="0.81" detail="만차 분류 · 시연값" /></div>
-      <Panel title="모델 평가 결과"><div className="admin-table-wrap"><table className="admin-table"><thead><tr><th>모델</th><th>평가 기간</th><th>MAE</th><th>정밀도</th><th>재현율</th><th>F1</th></tr></thead><tbody><tr><td>v1.2 · 시연</td><td>최근 7일</td><td>0.12</td><td>0.84</td><td>0.79</td><td>0.81</td></tr><tr><td>v1.1 · 시연</td><td>이전 7일</td><td>0.15</td><td>0.80</td><td>0.76</td><td>0.78</td></tr></tbody></table></div></Panel><p className="admin-form-note">위 수치는 화면 시연용입니다. 모델 평가 API가 연결되면 서버 산출값으로 바뀝니다.</p></>
-      : <PendingData description="모델 평가 결과 API가 준비되면 MAE·정밀도·재현율·F1을 표시합니다." />}
-  </div>;
-}
-
-export function MappingsPage() {
-  const [fileName, setFileName] = useState('');
-  return <div className="admin-page"><Heading title="기준정보 · 매핑" description="충전소 기준정보와 휴게소·IC 접근 매핑을 관리합니다." />
-    <div className="admin-section-grid"><Panel title="기준정보 적재"><p className="muted small">검증된 기준정보 파일을 선택한 뒤 서버의 검증 결과를 확인하는 흐름입니다.</p><label className="admin-file-label"><FileUp size={18} /> CSV 파일 선택<input type="file" accept=".csv,text/csv" onChange={event => setFileName(event.target.files?.[0]?.name ?? '')} /></label><p className="admin-form-note">{fileName ? `선택한 파일: ${fileName}` : '선택한 파일 없음'}</p><Button disabled>검증 및 적재</Button><p className="admin-form-note">적재 API와 관리자 권한 확인이 준비되면 실행할 수 있습니다.</p></Panel>
-      <Panel title="매핑 처리 단계"><ol className="admin-steps"><li>① 기준정보 형식 검증</li><li>② 검증된 휴게소 매핑 적용</li><li>③ IC 인근 자동 매핑</li><li>④ 결과 및 제외 대상 확인</li></ol><p className="admin-form-note">현재 단계 표시는 작업 흐름 안내이며 실행 상태가 아닙니다.</p></Panel></div>
-    <PendingData description="적재 이력과 매핑 결과 API가 연결되면 처리 건수·오류·제외 대상을 표시합니다." />
-  </div>;
-}
-
-export function ModelsPage() {
-  return <div className="admin-page"><Heading title="모델 학습 · 반영" description="학습 결과를 검토하고 승인된 모델의 반영 상태를 확인합니다." />
-    <div className="admin-section-grid"><Panel title="학습 · 평가"><ol className="admin-steps"><li>① 학습 데이터 준비</li><li>② 모델 학습</li><li>③ 평가 지표 검토</li></ol><Button disabled>학습 실행</Button></Panel><Panel title="운영 반영"><ol className="admin-steps"><li>① 후보 모델 검토</li><li>② 운영자 승인</li><li>③ 모델 반영</li></ol><Button disabled>모델 반영 승인</Button></Panel></div>
-    <PendingData description="학습·평가·승인 API와 권한 검증이 준비되면 모델 이력과 실행 기능을 연결합니다." />
   </div>;
 }
 

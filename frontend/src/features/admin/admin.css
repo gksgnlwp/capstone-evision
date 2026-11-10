@@ -38,6 +38,7 @@
 .admin-login-card { width: min(100%, 420px); background: white; border: 1px solid var(--color-border); border-radius: var(--radius-lg); padding: 32px; display: grid; gap: 16px; box-shadow: var(--shadow-overlay); }
 .admin-login-card h1 { font-size: 25px; }
 .admin-login-card > p { font-size: 13px; }
+.admin-login-form { display: grid; gap: 13px; }
 .admin-login-icon { width: 48px; height: 48px; border-radius: 14px; display: grid; place-items: center; background: var(--color-primary-soft); color: var(--color-primary); }
 .admin-callout { display: flex; gap: 8px; background: var(--color-info-soft); color: var(--color-info); padding: 12px; border-radius: var(--radius-md); font-size: 13px; }
 .admin-field { display: grid; gap: 5px; font-size: 13px; font-weight: 700; }
@@ -51,5 +52,15 @@
 .admin-steps { list-style: none; margin: 0 0 16px; padding: 0; display: grid; gap: 14px; }
 .admin-steps li { display: flex; align-items: center; gap: 9px; font-size: 13px; }
 .admin-steps svg { color: var(--color-primary); }
+.admin-input-error { color: var(--color-danger); font-size: var(--text-sm); }
+.admin-model-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+.admin-model-option { display: grid; grid-template-columns: 1fr auto; gap: 5px; padding: 14px; text-align: left; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: white; color: var(--color-text); }
+.admin-model-option.is-selected { border-color: var(--color-primary); background: var(--color-primary-soft); }
+.admin-model-option span { font-size: var(--text-xs); color: var(--color-primary); }
+.admin-model-option small { grid-column: 1 / -1; color: var(--color-text-muted); }
+.admin-model-review { display: grid; gap: 9px; margin-top: 15px; padding: 14px; border-radius: var(--radius-md); background: var(--color-neutral-soft); }
+.admin-model-review label { display: flex; gap: 8px; align-items: center; font-size: var(--text-sm); }
+.admin-model-review input { accent-color: var(--color-primary); width: 17px; height: 17px; }
+.admin-model-review p[role="status"] { display: flex; align-items: center; gap: 6px; color: var(--color-primary); }
 @media (max-width: 1050px) { .admin-metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .admin-section-grid { grid-template-columns: 1fr; } }
-@media (max-width: 560px) { .admin-page-head h1 { font-size: 23px; } .admin-metric-grid { grid-template-columns: 1fr; } .admin-pipeline { grid-template-columns: 1fr; } .admin-login-card { padding: 23px; } }
+@media (max-width: 560px) { .admin-page-head h1 { font-size: 23px; } .admin-metric-grid, .admin-model-list { grid-template-columns: 1fr; } .admin-pipeline { grid-template-columns: 1fr; } .admin-login-card { padding: 23px; } }

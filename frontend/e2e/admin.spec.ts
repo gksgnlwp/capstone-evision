@@ -27,3 +27,18 @@ test('운영 통계 필터는 표와 CSV 대상에 같은 조건을 적용한다
   await page.getByRole('button', { name: 'CSV 다운로드' }).click();
   expect((await download).suggestedFilename()).toBe('evision-demo-statistics.csv');
 });
+
+test('DEV 운영 화면은 평가 필터, CSV 미리보기, 모델 검토를 제공한다', async ({ page }) => {
+  await page.goto('/admin/accuracy');
+  await page.getByLabel('평가 기간').selectOption('이전 7일');
+  await expect(page.getByRole('cell', { name: 'v1.1' })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'v1.2' })).toHaveCount(0);
+  await page.goto('/admin/mappings');
+  await page.locator('input[type="file"]').setInputFiles({ name: 'stations.csv', mimeType: 'text/csv', buffer: Buffer.from('stationId,name\n1,test station') });
+  await expect(page.getByText(/stations.csv · 데이터 1행/)).toBeVisible();
+  await expect(page.getByRole('button', { name: '검증 및 적재' })).toBeDisabled();
+  await page.goto('/admin/models');
+  await page.getByRole('button', { name: /v1.1.*운영 중/ }).click();
+  await page.getByLabel('시연용 평가 지표를 확인했습니다').check();
+  await expect(page.getByText(/서버 승인이나 모델 반영은 실행되지 않았습니다/)).toBeVisible();
+});

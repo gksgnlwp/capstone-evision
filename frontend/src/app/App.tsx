@@ -19,7 +19,8 @@ import { PredictionPage, PatternPage } from '../features/stations/PredictionPage
 import { PredictionUnavailablePage } from '../features/stations/PredictionUnavailablePage';
 import { OperatorPage } from '../features/personalization/OperatorPage';
 import { FavoritesPage } from '../features/personalization/FavoritesPage';
-import { AdminAccess, AdminLoginPage, CollectionPage, StatisticsPage, AccuracyPage, MappingsPage, ModelsPage, AdminNotFound } from '../features/admin/AdminPages';
+import { AdminAccess, AdminLoginPage, CollectionPage, StatisticsPage, AdminNotFound } from '../features/admin/AdminPages';
+import { AccuracyPage, MappingsPage, ModelsPage } from '../features/admin/AdminDemoPages';
 const MapSearchPage = lazy(() => import('../features/search/MapSearchPage').then(module => ({ default: module.MapSearchPage })));
 
 function RouteEffects() {

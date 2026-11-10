@@ -63,7 +63,7 @@ function RecommendationResults({ query, params, selected, onToggle }: { query: R
   return <div className="stack">
     <div className="row between"><h2>추천 상위 {result.data.recommendations.length}곳</h2><Button variant="ghost" className="compact-button" onClick={result.retry} aria-label="추천 결과 새로고침"><RefreshCw size={16} /></Button></div>
     <div className="recommend-summary card"><span>추천 가능한 거리 약 {result.data.reachableKm.toFixed(1)}km</span><span>후보 {result.data.candidateCount}곳 · 범위 밖 {result.data.unreachableCount}곳</span></div>
-    <Link className="recommend-arrival card" to={`/recommendations/arrival?${params}`}><span>도착 예정시각 변경</span><strong>현재 서버 추정 시각 기준</strong></Link>
+    <Link className="recommend-arrival card" to={`/recommendations/arrival?${params}`}><span>도착 예정시각 변경</span><strong>{params.get('arrivalOffsetMin') ? `선택한 ${params.get('arrivalOffsetMin')}분 후 · 추천 미적용` : '현재 서버 추정 시각 기준'}</strong></Link>
     {result.data.recommendations.length === 0 ? <EmptyState title="추천 가능한 충전소가 없어요" description="현재 위치, 노선 또는 남은 주행 가능 거리를 확인해 주세요." />
       : <div className="station-list">{result.data.recommendations.map(item => <RecommendationCard key={item.stationId} item={item} selected={selected.includes(item.stationId)} onToggle={() => onToggle(item.stationId)} />)}</div>}
     {selected.length === 2 && <Link className="button button--primary button--full" to={`/compare?${compareParams}`}>선택한 2곳 비교하기</Link>}

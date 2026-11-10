@@ -32,11 +32,11 @@
 
 3번 작업의 추천은 현재 백엔드 `RecommendController`의 공개 `GET /api/recommendations`를 사용합니다. `lat`, `lng`, `routeId`, `remainingRangeKm`이 필수이고 `direction`, `chargerType`, `limit`은 선택입니다. 응답의 `recommendations` 순위를 유지하고 `availabilityProbability`, `basis`, `eta`, `distanceKm`, `detourKm`을 검증해 표시합니다. 현재 API에는 도착시각 입력, 예상 대기시간, 운영기관이 없습니다. M05 입력을 결과에 반영하려면 백엔드 계약을 확장해야 하며, 현재 프론트는 지원하지 않는 기능을 완료된 것처럼 표시하지 않습니다.
 
-4번 작업의 상세는 `GET /api/stations/{stationId}`, 충전기 상태 이력은 `GET /api/chargers/{chargerId}/history`에 연결합니다. 이력은 `[from, to)` 구간의 KST 로컬 시각을 보내며 기본 24시간, 최대 7일로 제한합니다. `nextCursor`가 있을 때만 다음 페이지를 요청합니다. 현재 백엔드에는 충전소별 예측 상세와 요일·시간대별 혼잡 패턴 조회 API가 없으므로 해당 수치를 표시하지 않고, 예측 미제공 화면에서는 상세 API로 확인한 현재 상태만 별도로 안내합니다.
+4번 작업의 상세는 `GET /api/stations/{stationId}`, 충전기 상태 이력은 `GET /api/chargers/{chargerId}/history`에 연결합니다. 이력은 `[from, to)` 구간의 KST 로컬 시각을 보내며 기본 24시간, 최대 7일로 제한합니다. `nextCursor`가 있을 때만 다음 페이지를 요청합니다. 현재 백엔드에는 충전소별 예측 상세와 요일·시간대별 혼잡 패턴 조회 API가 없습니다. M09·M10의 DEV 화면은 시연값을 명시하고 PRD에서는 미제공 상태를 표시합니다. 예측 미제공 화면에서는 상세 API로 확인한 현재 상태만 별도로 안내합니다.
 
 5번 작업의 운영기관은 `GET /api/operators`의 `operators` 배열에서 `busiId`, `name`, `stationCount`를 읽습니다. 선호 코드는 브라우저에만 저장하고 지도·경로 검색 응답의 `busiId`와 비교해 강조합니다. 즐겨찾기는 브라우저에 최대 20개 ID만 저장하고, 비어 있지 않을 때 `GET /api/stations/summaries?ids=1,2`를 호출합니다. `ACTIVE`, `CLOSED`, `NOT_FOUND`를 구분하며 서버 응답이 일부 누락되면 실패로 처리합니다. 현재 추천 API는 선호 기관을 입력받지 않고 응답에 `busiId`도 없으므로 추천 가중치와 추천 카드의 기관 강조는 백엔드 계약 확정 후 연결합니다.
 
-6번 작업의 D01은 `GET /api/admin/collection-status?from=...&to=...` 응답을 검증해 가용률·회차 집계·누락 구간·디스크 상태를 표시합니다. 시각은 KST `LocalDateTime` 형식이며 조회 기간은 최대 31일입니다. API에 개별 회차 목록이나 예측 배치 상태가 없어 해당 영역은 집계와 연동 대기 상태로 표시합니다. 인증·인가가 아직 없으므로 PRD 운영 경로는 로그인 안내 화면으로 이동하고 로그인 동작은 비활성화합니다. DEV에서만 시연 데이터로 D00~D05를 탐색합니다. D02~D05의 통계·매핑·모델 관리 API는 계약 확정 후 연결합니다.
+6번 작업의 D01은 `GET /api/admin/collection-status?from=...&to=...` 응답을 검증해 가용률·회차 집계·누락 구간·디스크 상태를 표시합니다. 시각은 KST `LocalDateTime` 형식이며 조회 기간은 최대 31일입니다. API에 개별 회차 목록이나 예측 배치 상태가 없어 해당 영역은 집계와 연동 대기 상태로 표시합니다. 인증·인가가 아직 없으므로 PRD 운영 경로는 로그인 화면으로 이동합니다. 로그인 폼 입력은 서버로 전송하지 않고 인증되지 않은 접근은 차단합니다. DEV에서만 시연 데이터로 D00~D05를 탐색합니다. D02~D05의 통계·매핑·모델 관리 API는 계약 확정 후 연결합니다.
 
 각 작업의 기능 폴더에서 화면 모델과 서비스 인터페이스를 정의하고, mock fixture와 실제 DTO 변환을 분리합니다. 응답을 제네릭 타입으로 지정해도 런타임 검증이 되지 않습니다. 실제 연동 시 스키마 검증 또는 명시적 파싱을 어댑터에 추가합니다.
 
