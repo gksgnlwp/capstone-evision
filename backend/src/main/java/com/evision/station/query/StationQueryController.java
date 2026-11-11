@@ -62,7 +62,7 @@ public class StationQueryController {
             @Parameter(description = "휴게소 방향 (원천 값 그대로, 예: 상행). routeId와 함께만 쓸 수 있다. 양방향 휴게소는 어느 방향을 지정해도 나온다. IC는 방향 구분이 없어 같은 노선의 IC는 그대로 나온다(IC를 빼려면 accessType=REST_AREA).")
             @RequestParam(required = false) String direction,
             @RequestParam(required = false) AccessType accessType,
-            @Parameter(description = "충전기 타입 코드 (원천 코드 그대로, 예: 04)")
+            @Parameter(description = "충전기 타입 코드 (원천 코드, 예: 04). 그 커넥터를 가진 복합형도 함께 나온다 (04 → 04·05·06·10)")
             @RequestParam(required = false) String chargerType,
             @Parameter(description = "기본 100, 최대 500")
             @RequestParam(required = false) Integer limit) {

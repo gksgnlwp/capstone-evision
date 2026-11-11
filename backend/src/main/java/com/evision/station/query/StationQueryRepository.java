@@ -22,6 +22,7 @@ import com.evision.common.code.NormalizedStatus;
 import com.evision.reference.domain.QRoute;
 import com.evision.station.domain.AccessType;
 import com.evision.station.domain.Charger;
+import com.evision.station.domain.ChargerTypeCodes;
 import com.evision.station.domain.Station;
 import com.evision.station.domain.StationAccess;
 import com.querydsl.core.types.Projections;
@@ -252,13 +253,15 @@ public class StationQueryRepository {
                 .exists();
     }
 
+    /** 요청한 타입의 커넥터를 가진 충전기가 있는 충전소. 복합형(예: 차데모+콤보)도 포함한다. */
     private BooleanExpression hasChargerType(String chargerType) {
         if (chargerType == null) {
             return null;
         }
         return JPAExpressions.selectOne()
                 .from(charger)
-                .where(charger.station.eq(station), charger.deleted.isFalse(), charger.chargerType.eq(chargerType))
+                .where(charger.station.eq(station), charger.deleted.isFalse(),
+                        charger.chargerType.in(ChargerTypeCodes.compatibleWith(chargerType)))
                 .exists();
     }
 }
