@@ -95,17 +95,25 @@ D01은 백엔드 `GET /api/admin/collection-status` 응답에 맞춰 작성했�
 
 ### 로컬 백엔드 연결
 
-`.env.local`에 다음을 설정하고 개발 서버를 재시작합니다. 백엔드 프로세스와 DB는 별도로 실행되어 있어야 합니다.
+백엔드 프로세스와 DB를 먼저 실행한 뒤 공개 조회 API를 확인합니다.
+
+```powershell
+npm run smoke:api
+npm run dev:api
+```
+
+`smoke:api`는 기본적으로 `http://127.0.0.1:8080/api/`의 공개 조회 API 7종을 검사합니다. 다른 주소는 `API_SMOKE_BASE_URL` 환경변수로 지정합니다. `dev:api`는 `.env.production`의 PRD 데이터 경로를 개발 서버에서 사용하며, 요청 실패를 DEV 데이터로 대체하지 않습니다. 연동 순서와 검증 범위는 [integration-plan.md](docs/integration-plan.md)에 정리했습니다.
+
+백엔드 주소를 변경할 때는 `.env.production.local`에 다음을 설정하고 개발 서버를 재시작합니다.
 
 ```dotenv
-VITE_APP_ENV=PRD
 VITE_API_BASE_URL=/api/
 API_PROXY_TARGET=http://localhost:8080
 ```
 
 Vite가 `/api`를 백엔드로 전달하므로 로컬 브라우저의 CORS 충돌을 줄입니다. 공개 조회는 현재 백엔드 CORS 규격에 맞춰 `credentials: omit`으로 요청합니다. 운영 배포에는 별도의 역방향 프록시/CORS 구성이 필요합니다.
 
-로컬 개발 중 PRD를 확인하려면 위 값을 `.env.development.local`에 넣습니다. 일반 `.env.local`의 환경 구분은 `.env.development`보다 우선하지 않으므로 환경별 local 파일을 사용합니다.
+일반 `npm run dev`의 DEV 모드는 기존 시연 데이터용입니다. 실제 API 확인에는 `npm run dev:api`를 사용합니다.
 
 ## 6개 작업 단위
 

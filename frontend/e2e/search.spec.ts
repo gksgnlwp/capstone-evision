@@ -45,6 +45,19 @@ test('권한 거부 후 목적지·지도 대안과 재요청을 제공한다', 
   await expect(page.getByRole('heading', { name: /충전소 목록/ })).toBeVisible();
 });
 
+test('지도에서 위치 요청이 시간 초과되면 지도와 목록을 유지하고 오류를 알린다', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'geolocation', { value: {
+      getCurrentPosition: (_success: unknown, error: (e: unknown) => void) => error({ code: 3 }),
+    } });
+  });
+  await page.goto('/map');
+  await page.getByRole('button', { name: '현재 위치 확인' }).click();
+  await expect(page).toHaveURL(/\/map$/);
+  await expect(page.getByRole('alert')).toContainText('브라우저가 위치를 제때 제공하지 않았습니다');
+  await expect(page.getByRole('heading', { name: /충전소 목록/ })).toBeVisible();
+});
+
 test('위치 허용 시 지도 중심을 이동하고 위치를 영속 저장하지 않는다', async ({ context, page }) => {
   await context.grantPermissions(['geolocation']);
   await context.setGeolocation({ latitude: 37.235, longitude: 127.104 });

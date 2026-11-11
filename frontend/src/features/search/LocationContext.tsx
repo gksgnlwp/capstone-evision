@@ -22,10 +22,10 @@ export function LocationProvider({ children }: { children: ReactNode }) {
         setState({ status: 'success', position, message: '' }); resolve(position);
       }, error => {
         if (id !== requestId.current) { resolve(null); return; }
-        const message = error.code === 1 ? '위치 권한이 꺼져 있습니다. 브라우저의 사이트 설정에서 권한을 허용해 주세요.'
-          : error.code === 3 ? '위치 확인 시간이 초과되었습니다. 다시 시도해 주세요.' : '위치를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.';
+        const message = error.code === 1 ? '위치 권한이 꺼져 있습니다. 기기 위치 설정과 브라우저 사이트 권한을 확인해 주세요.'
+          : error.code === 3 ? '브라우저가 위치를 제때 제공하지 않았습니다. 기기 위치 설정을 확인하거나 지도를 직접 이동해 주세요.' : '위치를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.';
         setState({ status: error.code === 1 ? 'denied' : 'error', position: null, message }); resolve(null);
-      }, { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 });
+      }, { enableHighAccuracy: false, timeout: 20000, maximumAge: 60000 });
     });
   }, []);
   // 위치는 브라우저 메모리에서만 유지합니다. 새로고침하면 폐기됩니다.
