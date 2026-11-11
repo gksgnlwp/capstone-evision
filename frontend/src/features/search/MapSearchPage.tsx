@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { LocateFixed, Search } from 'lucide-react';
 import { Button, EmptyState, ErrorState, LoadingState } from '../../components/ui';
 import { useAsync } from '../../hooks/useAsync';
@@ -13,15 +13,17 @@ import type { Bounds, Coordinates } from './contracts';
 import { config } from '../../config/env';
 
 const defaultCenter: Coordinates = { lat: 37.25, lng: 127.09 };
+function nearbyBounds({ lat, lng }: Coordinates): Bounds {
+  return { minLat: lat - 0.35, minLng: lng - 0.45, maxLat: lat + 0.35, maxLng: lng + 0.45 };
+}
 function sameBounds(a: Bounds | null, b: Bounds | null) {
   return a && b && Object.keys(a).every(key => Math.abs(a[key as keyof Bounds] - b[key as keyof Bounds]) < 0.00001);
 }
 
 export function MapSearchPage() {
   const location = useLocationAccess();
-  const navigate = useNavigate();
   const [center, setCenter] = useState<Coordinates>(() => location.position || defaultCenter);
-  const [bounds, setBounds] = useState<Bounds | null>(() => config.environment === 'DEV' ? { minLat: 33, minLng: 124, maxLat: 39, maxLng: 132 } : null);
+  const [bounds, setBounds] = useState<Bounds | null>(() => config.environment === 'DEV' ? { minLat: 33, minLng: 124, maxLat: 39, maxLng: 132 } : nearbyBounds(location.position || defaultCenter));
   const [mapAvailable, setMapAvailable] = useState(false);
   const [viewport, setViewport] = useState<Bounds | null>(null);
   const [accessType, setAccessType] = useState<AccessFilter>('');
@@ -43,13 +45,16 @@ export function MapSearchPage() {
   }, []);
   async function locate() {
     const position = await location.request();
-    if (position) { setCenter(position); setSelectedId(null); }
-    else navigate('/location');
+    if (position) {
+      setCenter(position); setSelectedId(null);
+      if (!mapAvailable) setBounds(nearbyBounds(position));
+    }
   }
 
   return <div className="stack map-search-page">
     <div className="row between"><h1>내 주변 지도</h1><Button variant="ghost" className="compact-button" onClick={locate} loading={location.status === 'loading'} aria-label="현재 위치 확인"><LocateFixed size={20} /></Button></div>
     {!location.position && <p className="small muted">위치 미확인 · 지도를 이동해 직접 찾아보세요.</p>}
+    {location.message && <p role="alert" className="small field__error">{location.message}</p>}
     <SearchFilters accessType={accessType} chargerType={chargerType} onAccessChange={value => { setAccessType(value); setVisibleCount(10); setSelectedId(null); }} onChargerChange={value => { setChargerType(value); setVisibleCount(10); setSelectedId(null); }} />
     <div className="map-frame" role="region" aria-label="충전소 지도">
       <StationMap stations={stations} center={center} position={location.position} selectedId={selectedId} onSelect={setSelectedId} onBoundsChange={onBoundsChange} onAvailabilityChange={onAvailabilityChange} />
