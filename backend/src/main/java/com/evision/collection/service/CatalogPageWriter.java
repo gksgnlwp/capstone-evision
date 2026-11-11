@@ -90,6 +90,8 @@ public class CatalogPageWriter {
     @Transactional
     public PageResult writePage(long runId, List<CatalogEntry> entries, LocalDateTime collectedAt,
             Map<String, NormalizedStatus> statusCodes) {
+        // 충전기 표를 쓰기 전에 잠가 상태 수집과 교착이 나지 않게 한다.
+        stateChangePersister.lockWrites();
         // 교착 가능성을 줄이려고 키 순서로 정렬해 갱신한다.
         Map<String, CatalogEntry> stations = new LinkedHashMap<>();
         Map<String, CatalogEntry> chargers = new LinkedHashMap<>();
