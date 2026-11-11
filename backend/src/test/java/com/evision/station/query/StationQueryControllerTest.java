@@ -2,10 +2,12 @@ package com.evision.station.query;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.hasItem;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -18,12 +20,16 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 import com.evision.TestcontainersConfiguration;
+import com.evision.common.time.TimeConfig;
 import com.evision.support.TestDb;
 import com.jayway.jsonpath.JsonPath;
 
@@ -35,11 +41,12 @@ import jakarta.persistence.EntityManagerFactory;
  * <pre>
  * 노선 A: 휴게소 RA1(상행), RA2(하행)      노선 B: IC1
  * S1 (36.80, 127.20) → RA1   급속 5대(가능1·충전중1·불가1·미확인2) + 완속 1대 + 삭제된 급속 1대
- * S2 (36.81, 127.21) → RA2, IC1   급속 1대 (타입 07, 충전중)
+ * S2 (36.81, 127.21) → RA2, IC1   급속 2대 (타입 07, 충전중·불가)
  * S3 (36.82, 127.22) 매핑 없음 → 검색 제외
  * S4 (36.80, 127.20) → RA1, 삭제됨 → 검색·상세 제외
  * S5 (37.50, 127.00) → IC1, 영역 밖, 충전기 없음 → 급속이 없어 검색·노선·운영기관 제외 (OP-101)
- * 운영기관은 모두 ME(환경부)
+ * 운영기관은 모두 ME(환경부). 현재 시각은 T + 30분으로 고정한다 (오류 충전기 판정 기준).
+ * S1·S2는 모두 정상과 오류가 섞인 PARTIAL이라 검색 결과가 stationId 순이다.
  * </pre>
  */
 @SpringBootTest(properties = "spring.jpa.properties.hibernate.generate_statistics=true")
@@ -48,6 +55,16 @@ import jakarta.persistence.EntityManagerFactory;
 class StationQueryControllerTest {
 
     static final LocalDateTime T = LocalDateTime.of(2026, 9, 28, 10, 0);
+    static final LocalDateTime NOW = T.plusMinutes(30);
+
+    @TestConfiguration
+    static class FixedClock {
+        @Bean
+        @Primary
+        Clock fixedClock() {
+            return Clock.fixed(NOW.atZone(TimeConfig.KST).toInstant(), TimeConfig.KST);
+        }
+    }
     static final String AREA_MIN_LAT = "36.7", AREA_MIN_LNG = "127.1", AREA_MAX_LAT = "36.9", AREA_MAX_LNG = "127.3";
 
     @Autowired
@@ -86,6 +103,7 @@ class StationQueryControllerTest {
 
         s2 = station("ST000002", 36.81, 127.21, false);
         charger(s2, "01", "07", true, false, "3", "CHARGING", T);
+        charger(s2, "02", "07", true, false, "5", "UNAVAILABLE", T);
         mapRestArea(s2, ra2);
         mapIc(s2, ic1);
 
@@ -174,6 +192,8 @@ class StationQueryControllerTest {
                 .andExpect(jsonPath("$.stations[0].chargingCount").value(1))
                 .andExpect(jsonPath("$.stations[0].unavailableCount").value(1))
                 .andExpect(jsonPath("$.stations[0].unknownCount").value(2))
+                .andExpect(jsonPath("$.stations[0].suspectCount").value(0))
+                .andExpect(jsonPath("$.stations[0].reliability").value("PARTIAL"))
                 .andExpect(jsonPath("$.stations[0].latestStatusUpdatedAt").value("2026-09-28T10:05:00"))
                 .andExpect(jsonPath("$.stations[0].accesses[0].accessType").value("REST_AREA"))
                 .andExpect(jsonPath("$.stations[0].accesses[0].restAreaName").value("천안"))
@@ -181,8 +201,46 @@ class StationQueryControllerTest {
                 .andExpect(jsonPath("$.stations[0].accesses[0].routeName").value("경부선"))
                 .andExpect(jsonPath("$.stations[1].accesses.length()").value(2))
                 .andExpect(jsonPath("$.stations[1].accesses[1].icName").value("천안IC"));
-        // 충전소 조회, 접근지점 조회, 상태 집계 3회. 결과 건수가 늘어도 그대로여야 한다 (N+1 없음)
-        assertThat(stats.getPrepareStatementCount()).isEqualTo(3);
+        // 충전소, 접근지점, 충전기 상태, 마지막 수집 시각 4회. 결과 건수가 늘어도 그대로여야 한다 (N+1 없음)
+        assertThat(stats.getPrepareStatementCount()).isEqualTo(4);
+    }
+
+    @Test
+    void 오류_충전기는_가능_충전중_대수에서_빼고_믿을_수_있는_충전소부터_보여준다() throws Exception {
+        // S9: 급속 모두 정상 → NORMAL / S10: 충전중 7시간·사용가능 8일 그대로 → 의심만 있어 ALL_ERROR
+        long s9 = station("ST000009", 36.84, 127.24, false);
+        charger(s9, "01", "04", true, false, "2", "AVAILABLE", T.minusDays(6));
+        mapRestArea(s9, ra1);
+        long s10 = station("ST000010", 36.85, 127.25, false);
+        charger(s10, "01", "04", true, false, "3", "CHARGING", NOW.minusHours(7));
+        charger(s10, "02", "04", true, false, "2", "AVAILABLE", NOW.minusDays(8));
+        mapRestArea(s10, ra1);
+
+        mvc.perform(area(get("/api/stations")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.stations[*].statId", contains("ST000009", "ST000001", "ST000002", "ST000010")))
+                .andExpect(jsonPath("$.stations[*].reliability", contains("NORMAL", "PARTIAL", "PARTIAL", "ALL_ERROR")))
+                .andExpect(jsonPath("$.stations[0].availableCount").value(1))
+                .andExpect(jsonPath("$.stations[3].fastChargerCount").value(2))
+                .andExpect(jsonPath("$.stations[3].availableCount").value(0))
+                .andExpect(jsonPath("$.stations[3].chargingCount").value(0))
+                .andExpect(jsonPath("$.stations[3].suspectCount").value(2));
+    }
+
+    @Test
+    void 마지막으로_성공한_상태_수집_시각을_준다() throws Exception {
+        TestDb db = new TestDb(jdbc);
+        mvc.perform(area(get("/api/stations")))
+                .andExpect(jsonPath("$.statusCollectedAt").doesNotExist());
+
+        db.statusRun(T.plusMinutes(20), "SUCCESS");
+        db.statusRun(T.plusMinutes(25), "FAILED");   // 실패한 회차는 보지 않는다
+        mvc.perform(area(get("/api/stations")))
+                .andExpect(jsonPath("$.statusCollectedAt").value("2026-09-28T10:20:03"));
+        mvc.perform(get("/api/stations/{id}", s1))
+                .andExpect(jsonPath("$.statusCollectedAt").value("2026-09-28T10:20:03"));
+        mvc.perform(get("/api/stations/summaries").param("ids", String.valueOf(s1)))
+                .andExpect(jsonPath("$.statusCollectedAt").value("2026-09-28T10:20:03"));
     }
 
     @Test
@@ -210,12 +268,13 @@ class StationQueryControllerTest {
         mapIc(s6, ic2);
 
         // 노선 A + 상행: 상행 휴게소(S1)와 노선 A의 IC(S6). S2는 하행 휴게소와 노선 B IC라 빠진다
+        // S6은 급속이 모두 정상(NORMAL)이라 PARTIAL인 S1보다 앞에 온다
         mvc.perform(get("/api/stations").param("routeId", String.valueOf(routeA)).param("direction", "상행"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.stations[*].statId", contains("ST000001", "ST000006")))
-                .andExpect(jsonPath("$.stations[1].accesses.length()").value(1))
-                .andExpect(jsonPath("$.stations[1].accesses[0].accessType").value("IC"))
-                .andExpect(jsonPath("$.stations[1].accesses[0].icName").value("북천안IC"));
+                .andExpect(jsonPath("$.stations[*].statId", contains("ST000006", "ST000001")))
+                .andExpect(jsonPath("$.stations[0].accesses.length()").value(1))
+                .andExpect(jsonPath("$.stations[0].accesses[0].accessType").value("IC"))
+                .andExpect(jsonPath("$.stations[0].accesses[0].icName").value("북천안IC"));
 
         // IC를 빼려면 접근유형을 휴게소로 지정한다
         mvc.perform(get("/api/stations").param("routeId", String.valueOf(routeA)).param("direction", "상행")
@@ -234,10 +293,10 @@ class StationQueryControllerTest {
 
         mvc.perform(get("/api/stations").param("routeId", String.valueOf(routeA)).param("direction", "상행"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.stations[*].statId", contains("ST000001", "ST000008")))
-                .andExpect(jsonPath("$.stations[1].accesses[0].direction").value("양방향"));
+                .andExpect(jsonPath("$.stations[*].statId", contains("ST000008", "ST000001")))   // 정상인 S8이 먼저
+                .andExpect(jsonPath("$.stations[0].accesses[0].direction").value("양방향"));
         mvc.perform(get("/api/stations").param("routeId", String.valueOf(routeA)).param("direction", "하행"))
-                .andExpect(jsonPath("$.stations[*].statId", contains("ST000002", "ST000008")));
+                .andExpect(jsonPath("$.stations[*].statId", contains("ST000008", "ST000002")));
         // 양방향만 지정하면 양방향 휴게소만
         mvc.perform(get("/api/stations").param("routeId", String.valueOf(routeA)).param("direction", "양방향"))
                 .andExpect(jsonPath("$.stations[*].statId", contains("ST000008")));
@@ -254,6 +313,17 @@ class StationQueryControllerTest {
         // 삭제된 충전기나 다른 충전소의 타입으로는 걸리지 않는다
         mvc.perform(get("/api/stations").param("routeId", String.valueOf(routeB)).param("chargerType", "04"))
                 .andExpect(jsonPath("$.count").value(0));
+
+        // 복합형(05 차데모+콤보)만 있는 충전소도 DC콤보(04)·차데모(01)로 찾는다. 커넥터가 없는 타입(07)으로는 안 나온다
+        long s11 = station("ST000011", 36.84, 127.24, false);
+        mapIc(s11, ic1);
+        charger(s11, "01", "05", true, false, "2", "AVAILABLE", T);
+        mvc.perform(area(get("/api/stations")).param("chargerType", "04"))
+                .andExpect(jsonPath("$.stations[*].statId", hasItem("ST000011")));
+        mvc.perform(area(get("/api/stations")).param("chargerType", "01"))
+                .andExpect(jsonPath("$.stations[*].statId", contains("ST000011")));
+        mvc.perform(area(get("/api/stations")).param("chargerType", "07"))
+                .andExpect(jsonPath("$.stations[*].statId", contains("ST000002")));
     }
 
     @Test
@@ -316,7 +386,7 @@ class StationQueryControllerTest {
     // ---- 즐겨찾기 요약 (FR-37, OP-108) ----
 
     @Test
-    void 즐겨찾기_요약은_요청_순서대로_상태와_함께_쿼리_3회로_준다() throws Exception {
+    void 즐겨찾기_요약은_요청_순서대로_상태와_함께_쿼리_4회로_준다() throws Exception {
         // S2, S1(중복), 운영 종료된 S4, 없는 ID → 중복은 한 번만, 순서는 요청대로
         Statistics stats = statistics();
         mvc.perform(get("/api/stations/summaries").param("ids", s2 + "," + s1 + "," + s4 + ",999999," + s1))
@@ -330,7 +400,7 @@ class StationQueryControllerTest {
                 .andExpect(jsonPath("$.items[1].station.availableCount").value(1))
                 .andExpect(jsonPath("$.items[2].station.statId").value("ST000004"))
                 .andExpect(jsonPath("$.items[3].station").doesNotExist());
-        assertThat(stats.getPrepareStatementCount()).isEqualTo(3);
+        assertThat(stats.getPrepareStatementCount()).isEqualTo(4);
     }
 
     @Test
@@ -339,7 +409,8 @@ class StationQueryControllerTest {
         mvc.perform(get("/api/stations/summaries").param("ids", "999998,999999"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items[*].status", contains("NOT_FOUND", "NOT_FOUND")));
-        assertThat(stats.getPrepareStatementCount()).isEqualTo(1);
+        // 충전소 조회와 마지막 수집 시각만
+        assertThat(stats.getPrepareStatementCount()).isEqualTo(2);
     }
 
     @Test
@@ -357,7 +428,7 @@ class StationQueryControllerTest {
     // ---- 6.3 상세 ----
 
     @Test
-    void 상세는_기본정보_접근지점_충전기_목록을_쿼리_3회로_준다() throws Exception {
+    void 상세는_기본정보_접근지점_충전기_목록을_쿼리_4회로_준다() throws Exception {
         Statistics stats = statistics();
         mvc.perform(get("/api/stations/{id}", s1))
                 .andExpect(status().isOk())
@@ -373,11 +444,14 @@ class StationQueryControllerTest {
                 .andExpect(jsonPath("$.chargers[0].normalizedStatus").value("AVAILABLE"))
                 .andExpect(jsonPath("$.chargers[0].statusCode").value("2"))
                 .andExpect(jsonPath("$.chargers[0].statusUpdatedAt").value("2026-09-28T10:00:00"))
+                .andExpect(jsonPath("$.reliability").value("PARTIAL"))
+                .andExpect(jsonPath("$.chargers[*].reliability",
+                        contains("NORMAL", "NORMAL", "FAULT", "UNKNOWN", "UNKNOWN", "NORMAL")))
                 // 상태 기록이 없으면 UNKNOWN이고 원천 코드는 null
                 .andExpect(jsonPath("$.chargers[3].normalizedStatus").value("UNKNOWN"))
                 .andExpect(jsonPath("$.chargers[3].statusCode").doesNotExist())
                 .andExpect(jsonPath("$.chargers[5].fast").value(false));
-        assertThat(stats.getPrepareStatementCount()).isEqualTo(3);
+        assertThat(stats.getPrepareStatementCount()).isEqualTo(4);
     }
 
     @Test

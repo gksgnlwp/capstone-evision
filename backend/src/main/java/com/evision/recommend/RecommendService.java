@@ -70,7 +70,7 @@ public class RecommendService {
         double reachableKm = round(c.remainingRangeKm() * scorer.safetyRatio(), 1);
 
         Map<Long, Located> nearest = nearestAccessPerStation(c,
-                repository.findCandidateAccesses(c.routeId(), c.direction(), c.chargerType()));
+                repository.findCandidateAccesses(c.routeId(), c.direction(), c.chargerType(), now));
         if (nearest.isEmpty()) {
             return new RecommendResponse(now, reachableKm, 0, 0, List.of());
         }

@@ -1,6 +1,7 @@
 package com.evision.station.query;
 
 import static com.evision.collection.domain.QChargerStatusHistory.chargerStatusHistory;
+import static com.evision.collection.domain.QCollectionRun.collectionRun;
 import static com.evision.reference.domain.QInterchange.interchange;
 import static com.evision.reference.domain.QRestArea.restArea;
 import static com.evision.station.domain.QCharger.charger;
@@ -15,10 +16,13 @@ import java.util.Optional;
 import org.springframework.stereotype.Repository;
 
 import com.evision.collection.domain.ChargerStatusHistory;
+import com.evision.collection.domain.RunStatus;
+import com.evision.collection.domain.RunType;
 import com.evision.common.code.NormalizedStatus;
 import com.evision.reference.domain.QRoute;
 import com.evision.station.domain.AccessType;
 import com.evision.station.domain.Charger;
+import com.evision.station.domain.ChargerTypeCodes;
 import com.evision.station.domain.Station;
 import com.evision.station.domain.StationAccess;
 import com.querydsl.core.types.Projections;
@@ -146,6 +150,29 @@ public class StationQueryRepository {
                 .fetch();
     }
 
+    public record ChargerStateRow(Long stationId, NormalizedStatus status, LocalDateTime updatedAt) {
+    }
+
+    /** 급속 충전기마다 현재 상태와 상태갱신일시 (오류 충전기 판정용). 상태가 아직 없는 충전기는 status가 null이다. */
+    public List<ChargerStateRow> findFastChargerStates(Collection<Long> stationIds) {
+        return query.select(Projections.constructor(ChargerStateRow.class,
+                        charger.station.id, charger.currentNormalizedStatus, charger.currentStatusUpdatedAt))
+                .from(charger)
+                .where(charger.station.id.in(stationIds), charger.fast.isTrue(), charger.deleted.isFalse())
+                .fetch();
+    }
+
+    /**
+     * 마지막으로 성공한 상태 수집이 끝난 시각. 상태갱신일시는 상태가 바뀐 시각이라 오래돼도 수집은 정상일 수 있으므로,
+     * 화면이 '갱신 지연'을 판단할 때는 이 값을 쓴다. 수집 기록이 없으면 null.
+     */
+    public LocalDateTime findLastStatusCollectedAt() {
+        return query.select(collectionRun.endedAt.max())
+                .from(collectionRun)
+                .where(collectionRun.runType.eq(RunType.STATUS), collectionRun.runStatus.eq(RunStatus.SUCCESS))
+                .fetchOne();
+    }
+
     /** FR-37 즐겨찾기 요약용. 운영 종료(삭제)된 충전소도 종료 표시를 위해 함께 가져온다. */
     public List<Station> findStationsIncludingDeleted(Collection<Long> stationIds) {
         return query.selectFrom(station)
@@ -226,13 +253,15 @@ public class StationQueryRepository {
                 .exists();
     }
 
+    /** 요청한 타입의 커넥터를 가진 충전기가 있는 충전소. 복합형(예: 차데모+콤보)도 포함한다. */
     private BooleanExpression hasChargerType(String chargerType) {
         if (chargerType == null) {
             return null;
         }
         return JPAExpressions.selectOne()
                 .from(charger)
-                .where(charger.station.eq(station), charger.deleted.isFalse(), charger.chargerType.eq(chargerType))
+                .where(charger.station.eq(station), charger.deleted.isFalse(),
+                        charger.chargerType.in(ChargerTypeCodes.compatibleWith(chargerType)))
                 .exists();
     }
 }

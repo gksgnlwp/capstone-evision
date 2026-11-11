@@ -23,6 +23,7 @@ import com.evision.recommend.AvailabilityPredictor.SlotCount;
 import com.evision.reference.domain.QRoute;
 import com.evision.station.domain.AccessType;
 import com.evision.station.domain.StationAccess;
+import com.evision.station.reliability.ChargerReliabilityPolicy;
 import com.querydsl.core.types.Projections;
 import com.querydsl.core.types.dsl.BooleanExpression;
 import com.querydsl.jpa.JPAExpressions;
@@ -63,17 +64,21 @@ public class RecommendRepository {
 
     private final JPAQueryFactory query;
     private final JdbcTemplate jdbc;
+    private final ChargerReliabilityPolicy reliabilityPolicy;
 
-    public RecommendRepository(JPAQueryFactory query, JdbcTemplate jdbc) {
+    public RecommendRepository(JPAQueryFactory query, JdbcTemplate jdbc, ChargerReliabilityPolicy reliabilityPolicy) {
         this.query = query;
         this.jdbc = jdbc;
+        this.reliabilityPolicy = reliabilityPolicy;
     }
 
     /**
      * 노선 위 접근지점과 그 충전소를 휴게소·IC·노선까지 한 번에 가져온다.
      * 삭제되지 않았고 급속충전기(타입 지정 시 그 타입)가 있는 충전소만.
+     * 정상인 급속충전기가 한 대도 없는 충전소(모두 의심·고장·점검·확인 불가)는 뺀다.
      */
-    public List<StationAccess> findCandidateAccesses(long routeId, String direction, String chargerType) {
+    public List<StationAccess> findCandidateAccesses(long routeId, String direction, String chargerType,
+            LocalDateTime now) {
         return query.selectFrom(stationAccess)
                 .join(stationAccess.station, station).fetchJoin()
                 .leftJoin(stationAccess.restArea, restArea).fetchJoin()
@@ -87,6 +92,11 @@ public class RecommendRepository {
                                 .from(charger)
                                 .where(charger.station.eq(station), charger.deleted.isFalse(), charger.fast.isTrue(),
                                         chargerTypeEq(chargerType))
+                                .exists(),
+                        JPAExpressions.selectOne()
+                                .from(charger)
+                                .where(charger.station.eq(station), charger.deleted.isFalse(), charger.fast.isTrue(),
+                                        reliabilityPolicy.isNormal(charger, now))
                                 .exists())
                 .orderBy(station.id.asc(), stationAccess.id.asc())
                 .fetch();
