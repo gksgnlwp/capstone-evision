@@ -115,6 +115,8 @@ class RecommendControllerTest {
                 .andExpect(jsonPath("$.recommendations[0].rank").value(1))
                 .andExpect(jsonPath("$.recommendations[?(@.statId == 'ST000001')].fastChargerCount").value(2))
                 .andExpect(jsonPath("$.recommendations[?(@.statId == 'ST000001')].maxOutputKw").value(100))
+                .andExpect(jsonPath("$.recommendations[?(@.statId == 'ST000001')].busiId").value("ME"))
+                .andExpect(jsonPath("$.recommendations[?(@.statId == 'ST000001')].orgName").value("테스트 운영기관"))
                 .andExpect(jsonPath("$.recommendations[?(@.statId == 'ST000004')].access.accessType").value("IC"))
                 .andExpect(jsonPath("$.recommendations[?(@.statId == 'ST000004')].detourKm").value(1.5));
         // Hibernate: 후보, 상태 집계, 최대 출력, AI 예측 4회 (N+1 없음). 과거 통계 집계 1회는 JdbcTemplate이라 여기서 세지 않는다
@@ -237,8 +239,8 @@ class RecommendControllerTest {
 
     private long station(String statId, boolean deleted) {
         return id("""
-                INSERT INTO station (stat_id, name, address, latitude, longitude, zcode, busi_id, del_yn, updated_at)
-                VALUES (?, '테스트 충전소', '테스트 주소', 36.0, 127.0, '44', 'ME', ?, now())
+                INSERT INTO station (stat_id, name, address, latitude, longitude, zcode, busi_id, org_name, del_yn, updated_at)
+                VALUES (?, '테스트 충전소', '테스트 주소', 36.0, 127.0, '44', 'ME', '테스트 운영기관', ?, now())
                 RETURNING station_id""", statId, deleted ? "Y" : "N");
     }
 
