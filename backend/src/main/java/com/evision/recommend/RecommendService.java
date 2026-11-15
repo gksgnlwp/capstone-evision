@@ -212,8 +212,8 @@ public class RecommendService {
         CurrentStatus cs = status == null ? new CurrentStatus(0, 0, 0, 0) : status;
         long eta = etaMinutes(l.travelKm());
         RecommendScorer.Breakdown b = s.breakdown();
-        return new RecommendResponse.Item(rank, st.getId(), st.getStatId(), st.getName(), st.getLatitude(),
-                st.getLongitude(), accessPoint(l.access()), round(l.distanceKm(), 1), round(l.detourKm(), 2),
+        return new RecommendResponse.Item(rank, st.getId(), st.getStatId(), st.getName(), st.getBusiId(),
+                st.getOrgName(), st.getLatitude(), st.getLongitude(), accessPoint(l.access()), round(l.distanceKm(), 1), round(l.detourKm(), 2),
                 (int) eta, now.plusMinutes(eta), round(p.probability(), 3), p.realtime(),
                 round(p.baseline(), 3), round(p.statistical(), 3), p.basis(), p.basisSampleCount(),
                 p.modelVersion(), fastCount(cs), cs.available(),
