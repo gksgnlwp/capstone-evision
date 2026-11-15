@@ -18,7 +18,7 @@ import com.evision.aggregation.OccupancyWindowCalculator.WindowResult;
 import com.evision.collection.service.SingleRunGuard;
 
 /**
- * SD-08 / OP-13·18 30분 단위 점유율 집계. 서비스 대상(station_access 매핑) 충전소만 집계한다.
+ * SD-08 / OP-13·18 30분 단위 점유율 집계. 서비스 대상(station_access 매핑, 급속충전기 1기 이상) 충전소만 집계한다.
  *
  * <p>관측 시점 t의 유효성: t 직전 10분 안(허용 오차로 t 이후 1분까지)에 SUCCESS 또는 PARTIAL STATUS 회차가 있으면 유효하다.
  * 수집 회차는 5분 격자 정각에 시작하지만 수백 ms 앞뒤로 흔들릴 수 있어 허용 오차를 둔다.
@@ -79,7 +79,7 @@ public class OccupancyAggregationService {
         }
         Map<Long, Integer> targets = repository.targetStations();
         if (targets.isEmpty()) {
-            log.debug("집계 대상 충전소가 없습니다 (station_access 매핑 없음). 구간={}", windowStart);
+            log.debug("집계 대상 충전소가 없습니다 (매핑된 급속충전기 보유 충전소 없음). 구간={}", windowStart);
             return 0;
         }
 

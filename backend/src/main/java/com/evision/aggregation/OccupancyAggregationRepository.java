@@ -20,14 +20,19 @@ import com.evision.aggregation.OccupancyWindowCalculator.PointObservation;
 @Repository
 public class OccupancyAggregationRepository {
 
-    /** 서비스 대상(station_access 존재) 충전소와 급속충전기 수 */
+    /**
+     * 서비스 대상(station_access 존재, 삭제되지 않은 급속충전기 1기 이상) 충전소와 급속충전기 수.
+     * 급속충전기가 없는 충전소(원천에서 삭제된 곳 등)는 관측할 것이 없으므로 집계하지 않는다.
+     * 집계하면 모든 시점이 "가용 0기, 미확인 0기"가 되어 빈 충전기가 없는 것(available = false)으로 저장된다.
+     */
     static final String TARGET_STATIONS = """
             SELECT s.station_id,
                    count(c.charger_id) FILTER (WHERE c.is_fast AND c.del_yn = 'N') AS fast_count
             FROM station s
-            LEFT JOIN charger c ON c.station_id = s.station_id
+            JOIN charger c ON c.station_id = s.station_id
             WHERE EXISTS (SELECT 1 FROM station_access sa WHERE sa.station_id = s.station_id)
             GROUP BY s.station_id
+            HAVING count(c.charger_id) FILTER (WHERE c.is_fast AND c.del_yn = 'N') > 0
             """;
 
     /**

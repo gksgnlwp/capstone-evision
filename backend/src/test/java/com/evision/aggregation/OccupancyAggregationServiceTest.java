@@ -183,6 +183,24 @@ class OccupancyAggregationServiceTest {
     }
 
     @Test
+    void 급속충전기가_없는_충전소는_집계하지_않는다() {
+        // 매핑은 남아 있지만 급속충전기가 원천에서 모두 삭제된 충전소, 완속만 있는 충전소
+        long deleted = db.station("KP000003");
+        db.mapToRestArea(deleted);
+        long gone = db.charger(deleted, "01", true);
+        jdbc.update("UPDATE charger SET del_yn = 'Y' WHERE charger_id = ?", gone);
+        long slowOnly = db.station("ME000003");
+        db.mapToRestArea(slowOnly);
+        db.charger(slowOnly, "01", false);
+
+        int saved = service.aggregateWindow(W);
+
+        // 집계하면 가용 0기·미확인 0기라 빈 충전기가 없는 것(available = false)으로 저장된다
+        assertThat(saved).isEqualTo(1);
+        assertThat(jdbc.queryForList("SELECT station_id FROM occupancy_30m", Long.class)).containsExactly(stationId);
+    }
+
+    @Test
     void 구간_시작은_00분_또는_30분이어야_한다() {
         assertThatThrownBy(() -> service.aggregateWindow(W.plusMinutes(5)))
                 .isInstanceOf(IllegalArgumentException.class);
