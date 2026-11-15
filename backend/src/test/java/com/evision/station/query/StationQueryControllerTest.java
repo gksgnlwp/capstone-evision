@@ -2,6 +2,7 @@ package com.evision.station.query;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.hasItem;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -312,6 +313,17 @@ class StationQueryControllerTest {
         // 삭제된 충전기나 다른 충전소의 타입으로는 걸리지 않는다
         mvc.perform(get("/api/stations").param("routeId", String.valueOf(routeB)).param("chargerType", "04"))
                 .andExpect(jsonPath("$.count").value(0));
+
+        // 복합형(05 차데모+콤보)만 있는 충전소도 DC콤보(04)·차데모(01)로 찾는다. 커넥터가 없는 타입(07)으로는 안 나온다
+        long s11 = station("ST000011", 36.84, 127.24, false);
+        mapIc(s11, ic1);
+        charger(s11, "01", "05", true, false, "2", "AVAILABLE", T);
+        mvc.perform(area(get("/api/stations")).param("chargerType", "04"))
+                .andExpect(jsonPath("$.stations[*].statId", hasItem("ST000011")));
+        mvc.perform(area(get("/api/stations")).param("chargerType", "01"))
+                .andExpect(jsonPath("$.stations[*].statId", contains("ST000011")));
+        mvc.perform(area(get("/api/stations")).param("chargerType", "07"))
+                .andExpect(jsonPath("$.stations[*].statId", contains("ST000002")));
     }
 
     @Test
