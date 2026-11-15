@@ -12,6 +12,7 @@ import com.evision.support.EvChargerApiIntegrationTest;
 
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.RecordedRequest;
+import okhttp3.mockwebserver.SocketPolicy;
 
 /**
  * OP-10 상태 수집 전체 흐름.
@@ -62,6 +63,21 @@ class StatusCollectionServiceTest extends EvChargerApiIntegrationTest {
     @Test
     void 일시_오류는_재시도해서_성공하면_SUCCESS() throws InterruptedException {
         server.enqueue(new MockResponse().setResponseCode(500));
+        server.enqueue(page(1, item("ME000001", "01", "2", "20260927101500")));
+
+        service.collectChargerStates();
+
+        assertThat(lastRun()).containsEntry("run_status", "SUCCESS")
+                .containsEntry("api_call_count", 2)
+                .containsEntry("retry_count", 1)
+                .containsEntry("inserted_count", 1);
+        takeRequests(2);
+    }
+
+    @Test
+    void 응답_본문이_중간에_끊겨도_재시도해서_성공하면_SUCCESS() throws InterruptedException {
+        server.enqueue(page(1, item("ME000001", "01", "2", "20260927101500"))
+                .setSocketPolicy(SocketPolicy.DISCONNECT_DURING_RESPONSE_BODY));
         server.enqueue(page(1, item("ME000001", "01", "2", "20260927101500")));
 
         service.collectChargerStates();

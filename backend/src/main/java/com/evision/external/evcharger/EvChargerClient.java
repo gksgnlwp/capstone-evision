@@ -20,6 +20,7 @@ import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 
 import com.evision.external.evcharger.dto.EvChargerPage;
@@ -186,6 +187,11 @@ public class EvChargerClient {
             Throwable cause = e.getMostSpecificCause();
             throw new EvChargerApiException(EvChargerApiException.EXTERNAL_API_FAILED,
                     "I/O 오류: " + cause.getClass().getSimpleName() + " " + cause.getMessage(), true);
+        } catch (RestClientException e) {
+            // 응답 본문을 받다가 연결이 끊기면 ResourceAccessException이 아니라 이 예외로 온다. 일시 오류라 재시도한다.
+            Throwable cause = e.getMostSpecificCause();
+            throw new EvChargerApiException(EvChargerApiException.EXTERNAL_API_FAILED,
+                    "응답 본문 수신 실패: " + cause.getClass().getSimpleName() + " " + cause.getMessage(), true);
         }
     }
 
