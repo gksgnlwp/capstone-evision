@@ -1,5 +1,6 @@
 package com.evision.station.query;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 import com.evision.station.query.StationSearchResponse.StationSummary;
@@ -8,9 +9,10 @@ import com.evision.station.query.StationSearchResponse.StationSummary;
  * 즐겨찾기 충전소 요약 (FR-37, OP-108). 요청한 ID 순서대로, 중복은 한 번만 준다.
  * 즐겨찾기 목록은 브라우저에 저장하며 서버는 조회만 한다.
  *
- * @param items 요청한 충전소마다 한 건
+ * @param statusCollectedAt 마지막으로 성공한 상태 수집이 끝난 시각 (없으면 null)
+ * @param items             요청한 충전소마다 한 건
  */
-public record StationSummaryListResponse(List<Item> items) {
+public record StationSummaryListResponse(LocalDateTime statusCollectedAt, List<Item> items) {
 
     /** ACTIVE: 운영 중, CLOSED: 운영 종료(삭제됨, 화면은 종료 표시와 삭제 안내), NOT_FOUND: 없는 ID */
     public enum ItemStatus {
