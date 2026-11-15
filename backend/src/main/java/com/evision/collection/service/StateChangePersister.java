@@ -15,6 +15,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.evision.collection.config.CollectionProperties;
@@ -49,6 +50,9 @@ public class StateChangePersister {
               AND (current_status_updated_at IS NULL OR current_status_updated_at < ?)
             """;
 
+    /** 상태 수집과 기본정보 갱신의 쓰기를 한 번에 하나씩 하게 하는 PostgreSQL advisory lock 키. */
+    private static final long WRITE_LOCK_KEY = 7_260_001L;
+
     private final JdbcTemplate jdbc;
     private final int batchSize;
 
@@ -69,6 +73,7 @@ public class StateChangePersister {
      */
     @Transactional
     public PersistResult persist(long runId, List<NormalizedState> states, LocalDateTime collectedAt, SourceApi sourceApi) {
+        lockWrites();
         Map<HistoryKey, NormalizedState> unique = new LinkedHashMap<>();
         Map<HistoryKey, Integer> occurrences = new HashMap<>();
         Set<HistoryKey> conflicted = new HashSet<>();
@@ -97,6 +102,16 @@ public class StateChangePersister {
 
         updateCurrentStatus(rows);
         return new PersistResult(inserted, duplicates, conflictCount);
+    }
+
+    /**
+     * 트랜잭션이 끝날 때까지 쓰기 잠금을 잡는다. 상태 수집은 이력→충전기, 기본정보 갱신은 충전기→이력 순으로
+     * 쓰므로 동시에 돌면 교착이 날 수 있다. API 호출은 잠그지 않으므로 긴 응답 대기가 서로를 막지 않는다.
+     * 같은 트랜잭션에서 다시 호출해도 된다.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void lockWrites() {
+        jdbc.queryForList("SELECT pg_advisory_xact_lock(?)", WRITE_LOCK_KEY);
     }
 
     private int insertHistory(long runId, List<NormalizedState> rows, LocalDateTime collectedAt, SourceApi sourceApi) {
