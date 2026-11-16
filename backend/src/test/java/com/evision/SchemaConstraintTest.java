@@ -56,7 +56,7 @@ class SchemaConstraintTest {
                 "SELECT normalized_status FROM code_dictionary WHERE code_group = 'CHARGER_STAT' AND code = '0'",
                 String.class);
 
-        assertThat(statCount).isEqualTo(6);
+        assertThat(statCount).isEqualTo(7);   // 0~5 + 9(상태미확인, V7)
         assertThat(unknown).isEqualTo("UNKNOWN");
     }
 

@@ -496,7 +496,7 @@ class StationQueryControllerTest {
         db.history(c1, "2", T.minusHours(1), run);          // 기간 밖
         db.history(c1, "3", T, run);
         db.history(c1, "2", T.plusMinutes(10), run);
-        db.history(c1, "9", T.plusMinutes(20), run);        // 코드표에 없는 값 → UNKNOWN
+        db.history(c1, "7", T.plusMinutes(20), run);        // 코드표에 없는 값 → UNKNOWN
         db.history(c1, "3", T.plusMinutes(30), run);
         db.history(c1, "2", T.plusMinutes(40), run);
         db.history(c1, "2", T.plusHours(1), run);           // to는 포함하지 않는다
