@@ -40,11 +40,11 @@ class StateNormalizerTest {
     @Test
     void 코드표에_없는_상태값은_UNKNOWN으로_정규화하고_원천값은_유지한다() {
         NormalizationResult result = normalizer.normalize(List.of(
-                item("ME000001", "01", "9", "20260927101500")), chargerIds, codes);
+                item("ME000001", "01", "7", "20260927101500")), chargerIds, codes);
 
         assertThat(result.states()).singleElement().satisfies(s -> {
             assertThat(s.normalizedStatus()).isEqualTo(NormalizedStatus.UNKNOWN);
-            assertThat(s.statusCode()).isEqualTo("9");
+            assertThat(s.statusCode()).isEqualTo("7");
         });
     }
 
