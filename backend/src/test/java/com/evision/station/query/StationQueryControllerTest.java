@@ -27,13 +27,17 @@ import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.evision.TestcontainersConfiguration;
 import com.evision.common.time.TimeConfig;
 import com.evision.support.TestDb;
 import com.jayway.jsonpath.JsonPath;
 
+import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
+import jakarta.persistence.PersistenceContext;
 
 /**
  * 조회 API (명세 6.2~6.4). 고정 데이터:
@@ -73,6 +77,12 @@ class StationQueryControllerTest {
     JdbcTemplate jdbc;
     @Autowired
     EntityManagerFactory emf;
+    @Autowired
+    StationQueryService service;
+    @Autowired
+    PlatformTransactionManager txManager;
+    @PersistenceContext
+    EntityManager em;
 
     long routeA, routeB, ra1, ra2, ic1;
     long s1, s2, s4, s5;
@@ -201,8 +211,22 @@ class StationQueryControllerTest {
                 .andExpect(jsonPath("$.stations[0].accesses[0].routeName").value("경부선"))
                 .andExpect(jsonPath("$.stations[1].accesses.length()").value(2))
                 .andExpect(jsonPath("$.stations[1].accesses[1].icName").value("천안IC"));
-        // 충전소, 접근지점, 충전기 상태, 마지막 수집 시각 4회. 결과 건수가 늘어도 그대로여야 한다 (N+1 없음)
-        assertThat(stats.getPrepareStatementCount()).isEqualTo(4);
+        // 실행 계획 설정 1회 + 충전소, 접근지점, 충전기 상태, 마지막 수집 시각 4회. 결과 건수가 늘어도 그대로여야 한다 (N+1 없음)
+        assertThat(stats.getPrepareStatementCount()).isEqualTo(5);
+    }
+
+    @Test
+    void 검색은_실제_값으로_실행_계획을_세우도록_트랜잭션_안에서만_설정한다() {
+        // 설정이 빠지면 운영 DB에서 넓은 영역 검색이 수십 초 걸린다 (값을 모르는 계획이 충전소부터 읽음)
+        String during = new TransactionTemplate(txManager).execute(tx -> {
+            service.search(StationSearchCondition.of(36.7, 127.1, 36.9, 127.3, null, null, null, null, null));
+            return (String) em.createNativeQuery("SHOW plan_cache_mode").getSingleResult();
+        });
+        assertThat(during).isEqualTo("force_custom_plan");
+        // SET LOCAL이라 트랜잭션이 끝나면 풀린다 (수집 등 다른 쿼리에는 영향 없음)
+        String after = new TransactionTemplate(txManager).execute(
+                tx -> (String) em.createNativeQuery("SHOW plan_cache_mode").getSingleResult());
+        assertThat(after).isEqualTo("auto");
     }
 
     @Test

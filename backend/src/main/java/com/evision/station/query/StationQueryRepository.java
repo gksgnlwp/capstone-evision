@@ -30,6 +30,8 @@ import com.querydsl.core.types.dsl.BooleanExpression;
 import com.querydsl.jpa.JPAExpressions;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 
+import jakarta.persistence.EntityManager;
+
 /**
  * 조회 API용 Querydsl 쿼리 (명세 6.2~6.4). 조건 메서드는 값이 없으면 null을 반환해 조건을 생략한다.
  */
@@ -43,9 +45,22 @@ public class StationQueryRepository {
     static final String BOTH_DIRECTIONS = "양방향";
 
     private final JPAQueryFactory query;
+    private final EntityManager em;
 
-    public StationQueryRepository(JPAQueryFactory query) {
+    public StationQueryRepository(JPAQueryFactory query, EntityManager em) {
         this.query = query;
+        this.em = em;
+    }
+
+    /**
+     * 이 트랜잭션의 쿼리는 실행할 때마다 실제 값으로 계획을 세우게 한다. 트랜잭션 안에서만 효과가 있다.
+     *
+     * <p>같은 검색 SQL이 여러 번 실행되면 PostgreSQL이 값을 모르는 채로 세운 계획(generic plan)을 재사용한다.
+     * 그 계획은 영역 조건에 맞는 충전소가 거의 없다고 보고 충전소부터 읽기 때문에, 넓은 영역에서는 서비스 대상이 아닌
+     * 충전소 수만 곳을 하나씩 검사해 수 초~수십 초가 걸린다. 값을 알면 접근지점 매핑(약 1,300곳)부터 읽는다.
+     */
+    public void planWithActualValues() {
+        em.createNativeQuery("SET LOCAL plan_cache_mode = force_custom_plan").executeUpdate();
     }
 
     /** OP-01 조건에 맞는 서비스 대상(접근지점 매핑·급속 충전기 있음) 충전소. station_id 순으로 최대 fetchSize개. */
