@@ -118,10 +118,12 @@ public class StationQueryService {
     }
 
     /**
-     * OP-01 충전소 검색. 쿼리 수는 결과 건수와 관계없이 4회 (충전소, 접근지점, 충전기 상태, 마지막 수집 시각).
+     * OP-01 충전소 검색. 쿼리 수는 결과 건수와 관계없이 4회 (충전소, 접근지점, 충전기 상태, 마지막 수집 시각)이고,
+     * 그 앞에 실행 계획 설정 1회가 더 나간다 ({@link StationQueryRepository#planWithActualValues()}).
      * 믿을 수 있는 충전소부터 정렬한다 (limit으로 자른 뒤 정렬).
      */
     public StationSearchResponse search(StationSearchCondition c) {
+        repository.planWithActualValues();
         LocalDateTime now = LocalDateTime.now(clock);
         List<Station> found = repository.searchStations(c, c.limit() + 1);
         boolean truncated = found.size() > c.limit();
