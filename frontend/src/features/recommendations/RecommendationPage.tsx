@@ -6,8 +6,9 @@ import { config } from '../../config/env';
 import { useAsync } from '../../hooks/useAsync';
 import { useLocationAccess } from '../search/LocationContext';
 import { searchService } from '../search/searchService';
+import { usePreferences } from '../personalization/preferences';
 import { recommendationService } from './recommendationService';
-import { accessLabel, arrivalLabel, basisLabel, probabilityLabel, reasonLabel } from './recommendationUtils';
+import { accessLabel, arrivalLabel, basisLabel, operatorLabel, probabilityLabel, reasonLabel } from './recommendationUtils';
 import { demoPosition, queryFromParams } from './queryState';
 import type { RecommendationItem, RecommendationQuery } from './contracts';
 
@@ -72,10 +73,12 @@ function RecommendationResults({ query, params, selected, onToggle }: { query: R
 }
 
 function RecommendationCard({ item, selected, onToggle }: { item: RecommendationItem; selected: boolean; onToggle: () => void }) {
-  return <article className="recommend-card card">
+  const { operatorIds } = usePreferences();
+  return <article className={`recommend-card card ${operatorIds.includes(item.busiId) ? 'recommend-card--preferred' : ''}`}>
     <div className="row between"><span className="recommend-rank">{item.rank}</span><label className="recommend-compare"><input type="checkbox" checked={selected} onChange={onToggle} aria-label={`${item.name} 비교 선택`} /> 비교</label></div>
     <h3>{item.name}</h3>
-    <div className="row wrap"><Badge tone={item.access.accessType === 'REST_AREA' ? 'success' : 'info'}>{accessLabel(item)}</Badge><Badge tone={item.basis === 'AI_FORECAST' ? 'success' : 'neutral'}>{basisLabel(item)}</Badge></div>
+    <div className="row wrap"><Badge tone={item.access.accessType === 'REST_AREA' ? 'success' : 'info'}>{accessLabel(item)}</Badge><Badge tone={item.basis === 'AI_FORECAST' ? 'success' : 'neutral'}>{basisLabel(item)}</Badge>{operatorIds.includes(item.busiId) && <Badge tone="success">선호 운영기관</Badge>}</div>
+    <p className="small muted">운영기관 · {operatorLabel(item)}</p>
     <div className="recommend-metrics"><div><span>이동</span><strong>약 {item.distanceKm.toFixed(1)}km</strong></div><div><span>도착</span><strong>{arrivalLabel(item.eta)}</strong></div><div><span>이용 확률</span><strong>{probabilityLabel(item.availabilityProbability)}</strong></div><div><span>예상 대기</span><strong>정보 없음</strong></div></div>
     <p className="recommend-reason">추천 판단 정보 · {reasonLabel(item)}</p>
     <Link className="text-link" to={`/stations/${item.stationId}`}>충전소 상세 보기</Link>

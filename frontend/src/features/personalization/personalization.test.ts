@@ -29,13 +29,14 @@ describe('선호 기관·즐겨찾기', () => {
   it('운영기관과 즐겨찾기 상태를 백엔드 조회 경로로 요청한다', async () => {
     const operators = await service.operators();
     const summaries = await service.favorites([104, 105]);
-    const request = vi.fn().mockResolvedValueOnce({ operators }).mockResolvedValueOnce({ items: summaries });
+    const request = vi.fn().mockResolvedValueOnce({ operators }).mockResolvedValueOnce(summaries);
     const live = createPersonalizationService({ request } as ApiClient);
     await live.operators();
     await live.favorites([104, 105]);
     expect(request.mock.calls[0]).toMatchObject(['operators', { credentials: 'omit' }]);
     expect(request.mock.calls[1]).toMatchObject(['stations/summaries', { credentials: 'omit', query: { ids: '104,105' } }]);
-    expect(summaries.map(item => item.stationId)).toEqual([104, 105]);
+    expect(summaries.items.map(item => item.stationId)).toEqual([104, 105]);
+    expect(summaries.statusCollectedAt).not.toBeNull();
   });
   it('20개 한도와 중복·잘못된 응답을 검사한다', async () => {
     await expect(service.favorites([])).rejects.toThrow('최대 20곳');

@@ -15,6 +15,7 @@
 .charger-gauge__segment--available { background: var(--color-primary); }
 .charger-gauge__segment--charging { background: var(--color-charging); }
 .charger-gauge__segment--unavailable { background: var(--color-danger); }
+.charger-gauge__segment--suspect { background: var(--color-warning); }
 .charger-gauge__segment--unknown { background: #91a1a2; }
 .charger-gauge-legend { display: flex; flex-wrap: wrap; gap: 6px 12px; color: var(--color-text-muted); font-size: var(--text-xs); }
 .charger-gauge-legend span { display: inline-flex; align-items: center; gap: 5px; }

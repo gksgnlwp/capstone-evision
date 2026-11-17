@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { Star } from 'lucide-react';
 import { Badge, Button, EmptyState, ErrorState, LoadingState } from '../../components/ui';
 import { useAsync } from '../../hooks/useAsync';
-import { parseKst, statusTime, statusTone } from '../search/searchUtils';
+import { availabilityLabel, isCollectionDelayed, statusTime, statusTone } from '../search/searchUtils';
 import { personalizationService } from './personalizationService';
 import { favoriteLimit, removeFavorite, usePreferences } from './preferences';
 import type { FavoriteSummary } from './contracts';
@@ -19,9 +19,9 @@ export function FavoritesPage() {
   const { favoriteIds, favoritePersistent } = usePreferences();
   const idsKey = favoriteIds.join(',');
   const loader = useCallback(async (signal: AbortSignal) => {
-    if (!idsKey) return { items: [] as FavoriteSummary[], receivedAt: Date.now() };
-    const items = await personalizationService.favorites(idsKey.split(',').map(Number), signal);
-    return { items, receivedAt: Date.now() };
+    if (!idsKey) return { items: [] as FavoriteSummary[], statusCollectedAt: null, receivedAt: Date.now() };
+    const summary = await personalizationService.favorites(idsKey.split(',').map(Number), signal);
+    return { ...summary, receivedAt: Date.now() };
   }, [idsKey]);
   const result = useAsync(loader);
 
@@ -35,16 +35,15 @@ export function FavoritesPage() {
         <div className="favorites-list">{result.data.items.map(item => {
           const station = item.station;
           const active = item.status === 'ACTIVE' && station !== null;
-          const updatedAt = parseKst(station?.latestStatusUpdatedAt ?? null);
-          const delayed = active && updatedAt !== null && result.data.receivedAt - updatedAt.getTime() >= 10 * 60 * 1000;
+          const delayed = active && isCollectionDelayed(result.data.statusCollectedAt, result.data.receivedAt);
           return <article className={`favorite-row ${active ? '' : 'favorite-row--closed'}`} key={item.stationId}>
             <div className="favorite-row__body">
               {active ? <Link to={`/stations/${item.stationId}`} className="favorite-row__name">{station.name}</Link> : <strong className="favorite-row__name">{station?.name || `충전소 ${item.stationId}`}</strong>}
               <span className="small muted">{active ? accessSummary(item) : item.status === 'CLOSED' ? '운영이 종료된 충전소입니다.' : '충전소 정보를 찾을 수 없습니다.'}</span>
             </div>
-            {active ? <Badge tone={statusTone(station)}>{station.latestStatusUpdatedAt === null || station.unknownCount === station.fastChargerCount ? '상태 미확인' : `이용 가능 ${station.availableCount}/${station.fastChargerCount}`}</Badge> : <Badge tone="danger">{item.status === 'CLOSED' ? '운영 종료' : '정보 없음'}</Badge>}
+            {active ? <Badge tone={statusTone(station)}>{availabilityLabel(station)}</Badge> : <Badge tone="danger">{item.status === 'CLOSED' ? '운영 종료' : '정보 없음'}</Badge>}
             <button className={`favorite-remove ${active ? '' : 'favorite-remove--closed'}`} type="button" aria-label={`${station?.name || `충전소 ${item.stationId}`} 즐겨찾기 해제`} onClick={() => removeFavorite(item.stationId)}>{active ? <Star size={22} fill="currentColor" aria-hidden="true" /> : '삭제'}</button>
-            {active && station.latestStatusUpdatedAt && <span className="favorite-row__time small muted">{statusTime(station.latestStatusUpdatedAt)} 갱신{delayed && <span className="favorite-delayed"> · 갱신 지연</span>}</span>}
+            {active && <span className="favorite-row__time small muted">{result.data.statusCollectedAt ? `${statusTime(result.data.statusCollectedAt)} 수집` : '수집 정보 없음'}{station.suspectCount > 0 && ` · 상태 의심 ${station.suspectCount}대`}{delayed && <span className="favorite-delayed"> · 수집 지연</span>}</span>}
           </article>;
         })}</div>
       </>}

@@ -9,6 +9,7 @@ export const recommendationSchema = z.object({
   candidateCount: z.number().int().nonnegative(), unreachableCount: z.number().int().nonnegative(),
   recommendations: z.array(z.object({
     rank: z.number().int().positive(), stationId: z.number().int().positive(), statId: z.string(), name: z.string(),
+    busiId: z.string().min(1), orgName: z.string().nullable(),
     latitude: coordinate.min(-90).max(90), longitude: coordinate.min(-180).max(180),
     access: z.object({
       accessType: z.enum(['REST_AREA', 'IC']), restAreaId: z.number().int().nullable(),

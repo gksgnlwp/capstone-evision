@@ -44,6 +44,7 @@
 .legend-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; margin-left: 5px; }
 .legend-dot--success { background: var(--color-primary); }
 .legend-dot--danger { background: var(--color-danger); }
+.legend-dot--warning { background: var(--color-warning); }
 .legend-dot--neutral { background: var(--color-text-muted); }
 .legend-dot--cluster { background: var(--color-info); }
 .map-placeholder { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 24px; text-align: center; background: var(--color-neutral-soft); color: var(--color-text-muted); }

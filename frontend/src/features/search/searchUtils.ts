@@ -19,13 +19,22 @@ export function distanceKm(from: Coordinates, to: Coordinates) {
   return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(Math.max(0, 1 - a)));
 }
 export function sortStations(stations: StationSummary[], origin: Coordinates | null) {
-  return origin ? [...stations].sort((a, b) => distanceKm(origin, a) - distanceKm(origin, b)) : stations;
+  if (!origin) return stations;
+  const priority = { NORMAL: 0, PARTIAL: 1, ALL_ERROR: 2 };
+  return [...stations].sort((a, b) => priority[a.reliability] - priority[b.reliability]
+    || distanceKm(origin, a) - distanceKm(origin, b));
 }
 export function statusTone(station: StationSummary) {
-  if (!station.latestStatusUpdatedAt || station.unknownCount === station.fastChargerCount) return 'neutral' as const;
+  if (station.reliability === 'ALL_ERROR' && station.unknownCount === station.fastChargerCount) return 'neutral' as const;
+  if (station.reliability === 'ALL_ERROR' && station.suspectCount > 0) return 'warning' as const;
+  if (station.reliability === 'ALL_ERROR') return 'danger' as const;
+  if (station.reliability === 'PARTIAL') return 'warning' as const;
   if (station.availableCount > 0) return 'success' as const;
-  if (station.unknownCount > 0) return 'warning' as const;
   return 'danger' as const;
+}
+export function availabilityLabel(station: StationSummary) {
+  if (station.reliability === 'ALL_ERROR') return station.unknownCount === station.fastChargerCount ? '상태 미확인' : '정상 충전기 없음';
+  return `이용 가능 ${station.availableCount}/${station.fastChargerCount}`;
 }
 export function parseKst(value: string | null): Date | null {
   if (!value) return null;
@@ -36,6 +45,10 @@ export function statusTime(value: string | null) {
   const date = parseKst(value);
   return date ? new Intl.DateTimeFormat('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Seoul' }).format(date) : '갱신 정보 없음';
 }
+export function isCollectionDelayed(value: string | null, now = Date.now()) {
+  const collected = parseKst(value);
+  return collected !== null && now - collected.getTime() >= 10 * 60 * 1000;
+}
 
 export const chargerOptions = [
   { value: '', label: '충전기 전체' },
@@ -45,5 +58,7 @@ export const chargerOptions = [
   { value: '05', label: '차데모·콤보' },
   { value: '06', label: '차데모·AC3상·콤보' },
   { value: '07', label: 'AC3상' },
+  { value: '09', label: 'NACS' },
+  { value: '10', label: 'DC콤보·NACS' },
 ];
-// backend는 원천 타입 코드의 완전 일치 검색입니다. 복합 타입 포함 필터는 계약 확정 전 자동 확장하지 않습니다.
+// 백엔드는 복합형 충전기도 포함해 커넥터 타입을 검색합니다.

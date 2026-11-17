@@ -9,6 +9,7 @@ export const chargerSchema = z.object({
   chargerId: z.number().int().positive(), chgerId: z.string(), chargerType: nullableText,
   outputKw: z.number().int().nonnegative().nullable(), method: nullableText, fast: z.boolean(),
   normalizedStatus: status, statusCode: nullableText, statusUpdatedAt: localDate,
+  reliability: z.enum(['NORMAL', 'SUSPECT', 'FAULT', 'UNKNOWN']),
 });
 
 export const stationDetailSchema = z.object({
@@ -17,7 +18,8 @@ export const stationDetailSchema = z.object({
   lat: z.number().min(-90).max(90), lng: z.number().min(-180).max(180),
   busiId: nullableText, orgName: nullableText, operatorName: nullableText, operatorCall: nullableText,
   useTime: nullableText, parkingFree: z.boolean().nullable(), limited: z.boolean().nullable(),
-  limitDetail: nullableText, infoUpdatedAt: localDate,
+  limitDetail: nullableText, infoUpdatedAt: localDate, statusCollectedAt: localDate,
+  reliability: z.enum(['NORMAL', 'PARTIAL', 'ALL_ERROR']).nullable(),
   accesses: z.array(accessSchema), chargers: z.array(chargerSchema),
 });
 

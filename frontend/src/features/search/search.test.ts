@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createSearchService } from './searchService';
 import { createMockClient } from '../../services/api/mockClient';
 import { searchHandlers, sampleRoutes, sampleStations } from './searchFixtures';
-import { deduplicateStations, distanceKm, parseKst, statusTone } from './searchUtils';
+import { availabilityLabel, deduplicateStations, distanceKm, isCollectionDelayed, parseKst, sortStations, statusTone } from './searchUtils';
 import type { ApiClient } from '../../services/api';
 
 const service = createSearchService(createMockClient(searchHandlers, 0));
@@ -22,6 +22,8 @@ describe('노선·지도 검색과 백엔드 계약', () => {
     const result = await service.search({ routeId: 1, direction: '하행', accessType: 'IC', chargerType: '06' });
     expect(result.stations.map(s => s.stationId)).toEqual([105, 108]);
     expect(result.stations.every(s => s.accesses.every(a => a.accessType === 'IC'))).toBe(true);
+    const combo = await service.search({ routeId: 1, chargerType: '04' });
+    expect(combo.stations.map(s => s.stationId)).toContain(108); // 06 복합형도 DC콤보를 제공
   });
   it('지도 영역의 네 좌표로 검색하고 결과 없음도 정상 응답한다', async () => {
     expect((await service.search({ bounds: { minLat: 37.23, minLng: 127.10, maxLat: 37.24, maxLng: 127.11 } })).stations.map(s => s.stationId)).toEqual([102]);
@@ -35,7 +37,7 @@ describe('노선·지도 검색과 백엔드 계약', () => {
     await expect(service.search({ direction: '하행' })).rejects.toThrow();
   });
   it('실제 DTO 키와 query 이름을 사용하며 공개 요청에는 인증 쿠키를 붙이지 않는다', async () => {
-    const request = vi.fn().mockResolvedValueOnce({ routes: sampleRoutes }).mockResolvedValueOnce({ stations: [sampleStations[0]], count: 1, limit: 100, truncated: false });
+    const request = vi.fn().mockResolvedValueOnce({ routes: sampleRoutes }).mockResolvedValueOnce({ stations: [sampleStations[0]], count: 1, limit: 100, truncated: false, statusCollectedAt: null });
     const live = createSearchService({ request } as ApiClient);
     await live.getRoutes();
     await live.search({ routeId: 1, direction: '상행', chargerType: '04' });
@@ -57,10 +59,18 @@ describe('노선·지도 검색과 백엔드 계약', () => {
   it('미확인 상태와 이용 가능 0대를 구분한다', () => {
     expect(statusTone(sampleStations[7])).toBe('neutral');
     expect(statusTone(sampleStations[5])).toBe('danger');
+    expect(statusTone({ ...sampleStations[0], reliability: 'PARTIAL', suspectCount: 1 })).toBe('warning');
+    expect(availabilityLabel(sampleStations[7])).toBe('상태 미확인');
+    const suspect = { ...sampleStations[0], availableCount: 0, chargingCount: 0, suspectCount: 4, reliability: 'ALL_ERROR' as const };
+    expect(statusTone(suspect)).toBe('warning');
+    expect(availabilityLabel(suspect)).toBe('정상 충전기 없음');
+    expect(sortStations([suspect, sampleStations[1]], { lat: suspect.lat, lng: suspect.lng })[0].stationId).toBe(sampleStations[1].stationId);
   });
   it('백엔드의 오프셋 없는 시각을 KST로 해석하고 거리를 직선으로 계산한다', () => {
     expect(parseKst('2026-10-28T14:05:00')?.toISOString()).toBe('2026-10-28T05:05:00.000Z');
     expect(parseKst('invalid')).toBeNull();
     expect(distanceKm({ lat: 37, lng: 127 }, { lat: 37, lng: 127 })).toBe(0);
+    expect(isCollectionDelayed('2026-11-18T10:00:00', Date.parse('2026-11-18T10:11:00+09:00'))).toBe(true);
+    expect(isCollectionDelayed('2026-11-18T10:05:00', Date.parse('2026-11-18T10:11:00+09:00'))).toBe(false);
   });
 });

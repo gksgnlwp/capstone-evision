@@ -11,7 +11,7 @@ export const personalizationHandlers: Record<string, MockHandler> = {
     .sort((a, b) => b.stationCount - a.stationCount || a.busiId.localeCompare(b.busiId)) }),
   'GET stations/summaries': ({ query }) => {
     const ids = String(query?.ids || '').split(',').map(Number);
-    return { items: ids.map(stationId => {
+    return { statusCollectedAt: new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 19), items: ids.map(stationId => {
       const station = sampleStations.find(item => item.stationId === stationId);
       return { stationId, status: station ? 'ACTIVE' : 'NOT_FOUND', station: station ? { ...station } : null };
     }) };

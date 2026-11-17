@@ -3,7 +3,7 @@ import type { ApiClient } from '../../services/api';
 import { createMockClient } from '../../services/api/mockClient';
 import { recommendationHandlers } from './recommendationFixtures';
 import { createRecommendationService } from './recommendationService';
-import { arrivalLabel, basisLabel, externalDirectionsUrl, reasonLabel } from './recommendationUtils';
+import { arrivalLabel, basisLabel, externalDirectionsUrl, operatorLabel, reasonLabel } from './recommendationUtils';
 
 const query = { position: { lat: 37.23, lng: 127.10 }, routeId: 1, direction: '하행', remainingRangeKm: 150 };
 
@@ -19,7 +19,8 @@ describe('추천 API와 비교 데이터', () => {
   it('휴게소와 IC 결과를 서버 순서대로 읽고 확률·근거를 보존한다', async () => {
     const result = await createRecommendationService(createMockClient(recommendationHandlers, 0)).getRecommendations(query);
     expect(result.recommendations).toHaveLength(5);
-    expect(result.recommendations[0]).toMatchObject({ stationId: 104, rank: 1, basis: 'AI_FORECAST', availabilityProbability: .85 });
+    expect(result.recommendations[0]).toMatchObject({ stationId: 104, rank: 1, basis: 'AI_FORECAST', availabilityProbability: .85, busiId: 'ME', orgName: '환경부' });
+    expect(operatorLabel({ ...result.recommendations[0], orgName: null })).toBe('ME');
     expect(result.recommendations[1]).toMatchObject({ stationId: 103, rank: 2, access: { accessType: 'IC' } });
     expect(basisLabel(result.recommendations[0])).toBe('AI 예측 기반');
     expect(externalDirectionsUrl(result.recommendations[0])).toContain('map.kakao.com/link/to/');
