@@ -20,12 +20,13 @@ export const stationSchema = z.object({
   accesses: z.array(accessSchema), fastChargerCount: z.number().int().nonnegative(),
   availableCount: z.number().int().nonnegative(), chargingCount: z.number().int().nonnegative(),
   unavailableCount: z.number().int().nonnegative(), unknownCount: z.number().int().nonnegative(),
-  latestStatusUpdatedAt: z.string().nullable(),
+  suspectCount: z.number().int().nonnegative(), latestStatusUpdatedAt: z.string().nullable(),
+  reliability: z.enum(['NORMAL', 'PARTIAL', 'ALL_ERROR']),
 });
 
 export const searchResponseSchema = z.object({
   count: z.number().int().nonnegative(), limit: z.number().int().min(1).max(500),
-  truncated: z.boolean(), stations: z.array(stationSchema),
+  truncated: z.boolean(), statusCollectedAt: z.string().nullable(), stations: z.array(stationSchema),
 });
 export const routesResponseSchema = z.object({ routes: z.array(z.object({
   routeId: z.number().int().positive(), routeNo: z.string(), routeName: z.string(), directions: z.array(z.string()),

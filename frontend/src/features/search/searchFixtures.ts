@@ -14,11 +14,22 @@ function ic(id: number, name: string, detourKm: number): AccessPoint {
   return { accessType: 'IC', restAreaId: null, restAreaName: null, direction: null, icId: id, icName: name,
     facilityType: 'IC', routeId: 1, routeNo: '1', routeName: '경부선', detourKm };
 }
-type SampleStation = StationSummary & { chargerTypes: string[] };
+type SampleStation = Omit<StationSummary, 'busiId'> & { busiId: string; chargerTypes: string[] };
+const connectors: Record<string, string[]> = {
+  '01': ['CHADEMO'], '03': ['CHADEMO', 'AC3'], '04': ['COMBO'],
+  '05': ['CHADEMO', 'COMBO'], '06': ['CHADEMO', 'AC3', 'COMBO'],
+  '07': ['AC3'], '09': ['NACS'], '10': ['COMBO', 'NACS'],
+};
+function matchesChargerType(actual: string, requested: string) {
+  const wanted = connectors[requested];
+  return actual === requested || (wanted !== undefined && wanted.every(connector => connectors[actual]?.includes(connector)));
+}
 function station(stationId: number, name: string, lat: number, lng: number, accesses: AccessPoint[], available: number, total: number, busiId = 'ME', unknown = 0): SampleStation {
   return { stationId, statId: `SAMPLE${stationId}`, name, busiId, lat, lng, accesses,
     fastChargerCount: total, availableCount: available, chargingCount: total - available - unknown,
-    unavailableCount: 0, unknownCount: unknown, latestStatusUpdatedAt: unknown === total ? null : new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 19),
+    unavailableCount: 0, unknownCount: unknown, suspectCount: 0,
+    latestStatusUpdatedAt: unknown === total ? null : new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 19),
+    reliability: unknown === total ? 'ALL_ERROR' : unknown > 0 ? 'PARTIAL' : 'NORMAL',
     chargerTypes: stationId % 3 === 0 ? ['04', '06'] : ['04', '01', '03', '05'] };
 }
 export const sampleStations: SampleStation[] = [
@@ -38,7 +49,7 @@ export const searchHandlers: Record<string, MockHandler> = {
   'GET routes': () => ({ routes: sampleRoutes }),
   'GET stations': ({ query = {} }) => {
     const limit = Math.min(Number(query.limit || 100), 500);
-    let matches = sampleStations.filter(s => !query.chargerType || s.chargerTypes.includes(String(query.chargerType)));
+    let matches = sampleStations.filter(s => !query.chargerType || s.chargerTypes.some(type => matchesChargerType(type, String(query.chargerType))));
     if (query.minLat !== undefined) matches = matches.filter(s => s.lat >= Number(query.minLat) && s.lat <= Number(query.maxLat) && s.lng >= Number(query.minLng) && s.lng <= Number(query.maxLng));
     const items = matches.map(s => ({ ...s, accesses: s.accesses.filter(a =>
       (!query.routeId || a.routeId === Number(query.routeId)) &&
@@ -46,6 +57,7 @@ export const searchHandlers: Record<string, MockHandler> = {
       (!query.direction || a.accessType === 'IC' || a.direction === query.direction || a.direction === '양방향')),
     })).filter(s => s.accesses.length > 0).sort((a, b) => a.stationId - b.stationId);
     const stations = items.slice(0, limit).map(({ chargerTypes: _, ...s }) => { void _; return s; });
-    return { count: stations.length, limit, truncated: items.length > limit, stations };
+    return { count: stations.length, limit, truncated: items.length > limit,
+      statusCollectedAt: new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 19), stations };
   },
 };

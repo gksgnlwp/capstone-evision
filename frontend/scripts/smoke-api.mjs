@@ -29,19 +29,27 @@ try {
     console.log('GET /api/stations: 노선 데이터가 없어 건너뜀');
   } else {
     const stations = await get('stations', { routeId: routes.routes[0].routeId, limit: 100 });
-    check(Array.isArray(stations.stations) && Number.isInteger(stations.count) && typeof stations.truncated === 'boolean', 'stations: 검색 응답 형식이 다릅니다.');
-    check(stations.stations.every(station => Number.isSafeInteger(station.stationId) && Array.isArray(station.accesses) && Number.isInteger(station.fastChargerCount)), 'stations: 충전소 요약 형식이 다릅니다.');
+    check(Array.isArray(stations.stations) && Number.isInteger(stations.count) && typeof stations.truncated === 'boolean'
+      && (stations.statusCollectedAt === null || typeof stations.statusCollectedAt === 'string'), 'stations: 검색 응답 형식이 다릅니다.');
+    check(stations.stations.every(station => Number.isSafeInteger(station.stationId) && Array.isArray(station.accesses)
+      && Number.isInteger(station.fastChargerCount) && Number.isInteger(station.suspectCount)
+      && ['NORMAL', 'PARTIAL', 'ALL_ERROR'].includes(station.reliability)
+      && station.availableCount + station.chargingCount + station.unavailableCount + station.unknownCount + station.suspectCount === station.fastChargerCount), 'stations: 충전소 신뢰도 또는 상태 대수 형식이 다릅니다.');
     console.log(`GET /api/stations: OK (${stations.count}곳)`);
 
     if (stations.stations.length > 0) {
       const first = stations.stations[0];
       const detail = await get(`stations/${first.stationId}`);
-      check(detail.stationId === first.stationId && Array.isArray(detail.chargers), 'station detail: 충전기 목록 형식이 다릅니다.');
+      check(detail.stationId === first.stationId && Array.isArray(detail.chargers)
+        && (detail.statusCollectedAt === null || typeof detail.statusCollectedAt === 'string')
+        && (detail.reliability === null || ['NORMAL', 'PARTIAL', 'ALL_ERROR'].includes(detail.reliability))
+        && detail.chargers.every(charger => ['NORMAL', 'SUSPECT', 'FAULT', 'UNKNOWN'].includes(charger.reliability)), 'station detail: 충전기 신뢰도 또는 수집 시각 형식이 다릅니다.');
       console.log(`GET /api/stations/{id}: OK (충전기 ${detail.chargers.length}대)`);
 
       const ids = stations.stations.slice(0, 2).map(station => station.stationId).join(',');
       const summaries = await get('stations/summaries', { ids });
-      check(Array.isArray(summaries.items) && summaries.items.length === ids.split(',').length, 'station summaries: 요청한 충전소 요약이 누락되었습니다.');
+      check(Array.isArray(summaries.items) && summaries.items.length === ids.split(',').length
+        && (summaries.statusCollectedAt === null || typeof summaries.statusCollectedAt === 'string'), 'station summaries: 요청한 충전소 요약이 누락되었습니다.');
       console.log(`GET /api/stations/summaries: OK (${summaries.items.length}곳)`);
 
       if (detail.chargers.length > 0) {
@@ -53,7 +61,9 @@ try {
       }
 
       const recommendation = await get('recommendations', { lat: first.lat, lng: first.lng, routeId: routes.routes[0].routeId, remainingRangeKm: 200, limit: 5 });
-      check(Array.isArray(recommendation.recommendations) && Number.isInteger(recommendation.candidateCount), 'recommendations: 추천 응답 형식이 다릅니다.');
+      check(Array.isArray(recommendation.recommendations) && Number.isInteger(recommendation.candidateCount)
+        && recommendation.recommendations.every(item => typeof item.busiId === 'string'
+          && (item.orgName === null || typeof item.orgName === 'string')), 'recommendations: 운영기관 필드를 포함한 추천 응답 형식이 다릅니다.');
       console.log(`GET /api/recommendations: OK (${recommendation.recommendations.length}곳)`);
     }
   }

@@ -10,13 +10,13 @@
 | 노선 검색 | `GET /api/stations?routeId=...&direction=...` |
 | 지도 검색 | `minLat`, `minLng`, `maxLat`, `maxLng` 네 값 모두 전달 |
 | 접근 필터 | `accessType=REST_AREA` 또는 `IC`, 전체일 때 생략 |
-| 충전기 필터 | `chargerType` 원천 코드의 완전 일치. 복합 타입은 별도 선택 |
+| 충전기 필터 | `chargerType` 코드가 요구하는 커넥터를 모두 가진 복합형 충전기도 검색 |
 | 조회 상한 | 기본 100, 최대 500. `truncated=true`이면 추가 조회 또는 조건 축소 안내 |
-| 상태 대수 | 필터에 맞는 충전소의 급속충전기 전체 기준. 선택한 커넥터만의 가용 대수가 아님 |
-| 갱신 시각 | 오프셋 없는 LocalDateTime은 KST로 해석 |
+| 상태 대수 | 급속충전기 전체 기준. `availableCount`·`chargingCount`에는 정상 분류만 포함하며 의심·고장·미확인은 각각 별도 대수 |
+| 수집·변경 시각 | `statusCollectedAt`은 마지막 성공 수집, `latestStatusUpdatedAt`은 원천 상태 변경 시각. 오프셋 없는 LocalDateTime은 KST로 해석 |
 | 인증 | 공개 GET에는 `credentials: omit` 사용 |
 
-백엔드는 `station_id` 순으로 응답합니다. 위치를 확인한 경우 프론트에서 **조회된 후보 안에서** 직선거리 순으로 재정렬합니다. 잘린 결과 전체에 대한 최단거리 정렬이나 실제 도로상의 전방 여부는 보장하지 않습니다. 지도와 목록 모두 같은 충전소 ID를 중복 표시하지 않으며, 여러 접근지점은 카드에 함께 요약합니다.
+백엔드는 조회 상한으로 먼저 자른 뒤 `NORMAL → PARTIAL → ALL_ERROR` 신뢰도 순으로 정렬합니다. 위치를 확인한 경우 프론트에서 **조회된 후보 안에서** 신뢰도를 먼저 유지하고 같은 신뢰도 안에서 직선거리 순으로 재정렬합니다. 잘린 결과 전체에 대한 최단거리 정렬이나 실제 도로상의 전방 여부는 보장하지 않습니다. 지도와 목록 모두 같은 충전소 ID를 중복 표시하지 않으며, 여러 접근지점은 카드에 함께 요약합니다.
 
 목적지에서 노선을 자동 계산하는 엔드포인트는 없으므로, 목적지 입력 후 노선·방향을 직접 선택합니다. 실제 경로·거리·ETA를 임의 생성하지 않습니다.
 
@@ -30,11 +30,11 @@
 
 ## 기능별 구현 방식
 
-3번 작업의 추천은 현재 백엔드 `RecommendController`의 공개 `GET /api/recommendations`를 사용합니다. `lat`, `lng`, `routeId`, `remainingRangeKm`이 필수이고 `direction`, `chargerType`, `limit`은 선택입니다. 응답의 `recommendations` 순위를 유지하고 `availabilityProbability`, `basis`, `eta`, `distanceKm`, `detourKm`을 검증해 표시합니다. 현재 API에는 도착시각 입력, 예상 대기시간, 운영기관이 없습니다. M05 입력을 결과에 반영하려면 백엔드 계약을 확장해야 하며, 현재 프론트는 지원하지 않는 기능을 완료된 것처럼 표시하지 않습니다.
+3번 작업의 추천은 현재 백엔드 `RecommendController`의 공개 `GET /api/recommendations`를 사용합니다. `lat`, `lng`, `routeId`, `remainingRangeKm`이 필수이고 `direction`, `chargerType`, `limit`은 선택입니다. 응답의 `recommendations` 순위를 유지하고 `availabilityProbability`, `basis`, `eta`, `distanceKm`, `detourKm`, `busiId`, `orgName`을 검증해 표시합니다. 추천 카드와 비교 표에는 운영기관 이름(없으면 코드)을 표시하고 `busiId`로 브라우저 선호 기관을 강조합니다. 현재 API에는 도착시각 입력과 예상 대기시간이 없습니다. M05 입력을 결과에 반영하려면 백엔드 계약을 확장해야 하며, 현재 프론트는 지원하지 않는 기능을 완료된 것처럼 표시하지 않습니다.
 
 4번 작업의 상세는 `GET /api/stations/{stationId}`, 충전기 상태 이력은 `GET /api/chargers/{chargerId}/history`에 연결합니다. 이력은 `[from, to)` 구간의 KST 로컬 시각을 보내며 기본 24시간, 최대 7일로 제한합니다. `nextCursor`가 있을 때만 다음 페이지를 요청합니다. 현재 백엔드에는 충전소별 예측 상세와 요일·시간대별 혼잡 패턴 조회 API가 없습니다. M09·M10의 DEV 화면은 시연값을 명시하고 PRD에서는 미제공 상태를 표시합니다. 예측 미제공 화면에서는 상세 API로 확인한 현재 상태만 별도로 안내합니다.
 
-5번 작업의 운영기관은 `GET /api/operators`의 `operators` 배열에서 `busiId`, `name`, `stationCount`를 읽습니다. 선호 코드는 브라우저에만 저장하고 지도·경로 검색 응답의 `busiId`와 비교해 강조합니다. 즐겨찾기는 브라우저에 최대 20개 ID만 저장하고, 비어 있지 않을 때 `GET /api/stations/summaries?ids=1,2`를 호출합니다. `ACTIVE`, `CLOSED`, `NOT_FOUND`를 구분하며 서버 응답이 일부 누락되면 실패로 처리합니다. 현재 추천 API는 선호 기관을 입력받지 않고 응답에 `busiId`도 없으므로 추천 가중치와 추천 카드의 기관 강조는 백엔드 계약 확정 후 연결합니다.
+5번 작업의 운영기관은 `GET /api/operators`의 `operators` 배열에서 `busiId`, `name`, `stationCount`를 읽습니다. 선호 코드는 브라우저에만 저장하고 지도·경로·추천 응답의 `busiId`와 비교해 강조합니다. 즐겨찾기는 브라우저에 최대 20개 ID만 저장하고, 비어 있지 않을 때 `GET /api/stations/summaries?ids=1,2`를 호출합니다. `ACTIVE`, `CLOSED`, `NOT_FOUND`를 구분하며 서버 응답이 일부 누락되면 실패로 처리합니다. 추천 API는 선호 기관 목록을 입력받지 않으므로 추천 점수 자체는 개인화하지 않습니다.
 
 6번 작업의 D01은 `GET /api/admin/collection-status?from=...&to=...` 응답을 검증해 가용률·회차 집계·누락 구간·디스크 상태를 표시합니다. 시각은 KST `LocalDateTime` 형식이며 조회 기간은 최대 31일입니다. API에 개별 회차 목록이나 예측 배치 상태가 없어 해당 영역은 집계와 연동 대기 상태로 표시합니다. 인증·인가가 아직 없으므로 PRD 운영 경로는 로그인 화면으로 이동합니다. 로그인 폼 입력은 서버로 전송하지 않고 인증되지 않은 접근은 차단합니다. DEV에서만 시연 데이터로 D00~D05를 탐색합니다. D02~D05의 통계·매핑·모델 관리 API는 계약 확정 후 연결합니다.
 

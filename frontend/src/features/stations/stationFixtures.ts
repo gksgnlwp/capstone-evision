@@ -12,6 +12,7 @@ function detail(id: number): StationDetail | null {
     address: '시연용 주소', addressDetail: null, lat: station.lat, lng: station.lng,
     busiId: station.busiId, orgName: '시연 운영기관', operatorName: '시연 운영기관', operatorCall: null,
     useTime: '24시간', parkingFree: null, limited: null, limitDetail: null, infoUpdatedAt: now,
+    statusCollectedAt: now, reliability: station.reliability,
     accesses: station.accesses,
     chargers: Array.from({ length: station.fastChargerCount }, (_, index) => {
       const normalizedStatus = index < station.availableCount ? 'AVAILABLE' as const
@@ -21,7 +22,8 @@ function detail(id: number): StationDetail | null {
         chargerType: index % 2 ? '06' : '04', outputKw: index % 2 ? 50 : 100,
         method: '단독', fast: true, normalizedStatus,
         statusCode: normalizedStatus === 'AVAILABLE' ? '2' : normalizedStatus === 'CHARGING' ? '3' : null,
-        statusUpdatedAt: normalizedStatus === 'UNKNOWN' ? null : now };
+        statusUpdatedAt: normalizedStatus === 'UNKNOWN' ? null : now,
+        reliability: normalizedStatus === 'UNKNOWN' ? 'UNKNOWN' as const : 'NORMAL' as const };
     }),
   };
 }

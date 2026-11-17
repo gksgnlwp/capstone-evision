@@ -1,6 +1,7 @@
 import type { RecommendationItem } from './contracts';
 
 export function probabilityLabel(value: number) { return `${Math.round(value * 100)}%`; }
+export function operatorLabel(item: RecommendationItem) { return item.orgName || item.busiId; }
 export function basisLabel(item: RecommendationItem) {
   if (item.basis === 'AI_FORECAST') return 'AI 예측 기반';
   if (item.basis === 'PRIOR') return '기본 통계 기반';

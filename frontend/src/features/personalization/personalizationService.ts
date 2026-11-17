@@ -22,7 +22,7 @@ export function createPersonalizationService(client: ApiClient) {
       if (!parsed.success) throw new ApiError('즐겨찾기 상태의 응답 형식을 확인할 수 없습니다.', 'invalid-response');
       const byId = new Map(parsed.data.items.map(item => [item.stationId, item]));
       if (byId.size !== ids.length || ids.some(id => !byId.has(id))) throw new ApiError('즐겨찾기 상태가 일부 누락되었습니다.', 'invalid-response');
-      return ids.map(id => byId.get(id)!);
+      return { statusCollectedAt: parsed.data.statusCollectedAt, items: ids.map(id => byId.get(id)!) };
     },
   };
 }

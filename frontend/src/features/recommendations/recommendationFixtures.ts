@@ -11,6 +11,7 @@ const demo = [
   { stationId: 105, probability: .58, detour: 2.4, score: .64, basis: 'PRIOR' as const },
   { stationId: 106, probability: .48, detour: 0, score: .52, basis: 'SAME_SLOT' as const },
 ];
+const operatorNames: Record<string, string> = { ME: '환경부', ST: 'SK일렉링크', CV: '채비' };
 
 export const recommendationHandlers: Record<string, MockHandler> = {
   'GET recommendations': ({ query = {} }) => {
@@ -33,6 +34,7 @@ export const recommendationHandlers: Record<string, MockHandler> = {
       const etaMinutes = Math.max(1, Math.round(distance / 80 * 60));
       return {
         rank: index + 1, stationId: station.stationId, statId: station.statId, name: station.name,
+        busiId: station.busiId, orgName: operatorNames[station.busiId] || null,
         latitude: station.lat, longitude: station.lng,
         access: { accessType: access.accessType, restAreaId: access.restAreaId, restAreaName: access.restAreaName,
           direction: access.direction, icId: access.icId, icName: access.icName, routeId: access.routeId,

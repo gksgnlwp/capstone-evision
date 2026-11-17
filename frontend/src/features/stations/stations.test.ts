@@ -13,6 +13,9 @@ describe('충전소 상세·충전기 이력 계약', () => {
     expect(detail.stationId).toBe(108);
     expect(detail.accesses).toHaveLength(2);
     expect(detail.chargers.every(charger => charger.normalizedStatus === 'UNKNOWN' && charger.statusCode === null)).toBe(true);
+    expect(detail.reliability).toBe('ALL_ERROR');
+    expect(detail.chargers.every(charger => charger.reliability === 'UNKNOWN')).toBe(true);
+    expect(detail.statusCollectedAt).not.toBeNull();
   });
   it('상세와 이력 요청의 실제 백엔드 경로·쿼리를 사용한다', async () => {
     const detail = await service.detail(104);

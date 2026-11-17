@@ -5,6 +5,7 @@
 .recommend-arrival { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: var(--text-sm); }
 .recommend-arrival strong { color: var(--color-primary); font-size: var(--text-xs); text-align: right; }
 .recommend-card { display: flex; flex-direction: column; gap: 11px; }
+.recommend-card--preferred { border-color: var(--color-primary); box-shadow: 0 0 0 2px var(--color-primary-soft); }
 .recommend-card h3 { font-size: var(--text-md); line-height: 1.4; }
 .recommend-rank, .compare-rank { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--color-primary); color: white; font-size: 12px; font-weight: 700; }
 .recommend-compare { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; font-size: var(--text-sm); }
@@ -22,7 +23,7 @@
 .compare-table thead th:not(:first-child) { width: calc((100% - 78px) / 2); }
 .compare-table thead th span { display: block; margin-bottom: 6px; }
 .compare-table tbody th { color: var(--color-text-muted); font-weight: 500; }
-.compare-table tbody tr:nth-child(5) { background: var(--color-primary-soft); font-weight: 700; }
+.compare-table tbody tr:nth-child(6) { background: var(--color-primary-soft); font-weight: 700; }
 .compare-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .compare-actions .card { padding: 12px; }
 .compare-actions strong { font-size: var(--text-xs); overflow-wrap: anywhere; }
