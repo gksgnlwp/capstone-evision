@@ -11,7 +11,7 @@ import java.util.List;
  * 도달 가능: distanceKm + detourKm ≤ remainingRangeKm × safetyRatio   (아니면 제외)
  *
  * 항목 점수 (모두 0~1, 클수록 좋음):
- *   availability = 도착 시 가용 확률 (AvailabilityPredictor)
+ *   availability = 도착 시 쾌적 이용 확률 (AvailabilityPredictor)
  *   detour       = 1 - min(detourKm / maxDetourKm, 1)
  *   power        = min(maxOutputKw / referenceOutputKw, 1)     출력 미상이면 0
  *   capacity     = n / (n + capacityHalfCount)                  급속 대수 n
@@ -66,7 +66,7 @@ public final class RecommendScorer {
     /**
      * @param distanceKm           현재 위치에서 접근지점까지 도로 거리
      * @param detourKm             접근지점에서 충전소까지 우회 거리 (station_access.detour_km)
-     * @param availability         도착 시 가용 확률
+     * @param availability         도착 시 쾌적 이용 확률
      * @param maxOutputKw          급속충전기 최대 출력 (미상이면 null)
      * @param fastChargerCount     급속충전기 대수
      */

@@ -198,7 +198,8 @@ class RecommendControllerTest {
 
     @Test
     void 과거_통계는_DB에서_도착_요일과_슬롯으로_센다() throws Exception {
-        // RA1(S1) 약 22분 뒤 도착. 같은 요일·슬롯 3주 모두 만차, 다른 슬롯 2건 가용, 5주 전(조회 기간 밖) 1건
+        // RA1(S1) 약 22분 뒤 도착. 같은 요일·슬롯 3주 모두 혼잡, 다른 슬롯 2건 쾌적, 5주 전(조회 기간 밖) 1건
+        // available 은 모두 true 로 넣어 쾌적 판정이 available 이 아니라 occupancy_rate 로 되는지 본다
         LocalDateTime window = AvailabilityPredictor.floorToWindow(LocalDateTime.now(clock).plusMinutes(22));
         occupancy("ST000001", window.minusWeeks(1), false);
         occupancy("ST000001", window.minusWeeks(2), false);
@@ -211,7 +212,7 @@ class RecommendControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.recommendations[?(@.statId == 'ST000001')].basis").value("SAME_DAY_SLOT"))
                 .andExpect(jsonPath("$.recommendations[?(@.statId == 'ST000001')].basisSampleCount").value(3))
-                // 전체 5건 중 2건 가용: p4 = (2+4·0.7)/9 = 0.533, 같은 슬롯·요일유형·요일 각 3건 모두 만차:
+                // 전체 5건 중 2건 쾌적: p4 = (2+4·0.7)/9 = 0.533, 같은 슬롯·요일유형·요일 각 3건 모두 혼잡:
                 // p3 = 4·p4/7 = 0.305, p2 = 4·p3/7 = 0.174, p1 = 4·p2/7 = 0.0995
                 .andExpect(jsonPath("$.recommendations[?(@.statId == 'ST000001')].statisticalProbability").value(0.1));
     }
@@ -295,12 +296,13 @@ class RecommendControllerTest {
                 window, p, modelVersion, generatedAt, statId);
     }
 
-    private void occupancy(String statId, LocalDateTime window, boolean available) {
+    /** comfortable 이면 사용률 0.25, 아니면 0.75 (기준 0.5) */
+    private void occupancy(String statId, LocalDateTime window, boolean comfortable) {
         jdbc.update("""
-                INSERT INTO occupancy_30m (station_id, window_start, fast_charger_count, available,
+                INSERT INTO occupancy_30m (station_id, window_start, fast_charger_count, occupancy_rate, available,
                                            full_minutes, valid_minutes, observed_points, computed_at)
-                SELECT station_id, ?, 2, ?, 0, 30, 6, now() FROM station WHERE stat_id = ?""",
-                window, available, statId);
+                SELECT station_id, ?, 2, ?, true, 0, 30, 6, now() FROM station WHERE stat_id = ?""",
+                window, comfortable ? new java.math.BigDecimal("0.25") : new java.math.BigDecimal("0.75"), statId);
     }
 
     private void mapRestArea(long stationId, long restAreaId) {

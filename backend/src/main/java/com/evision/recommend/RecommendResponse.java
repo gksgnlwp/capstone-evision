@@ -25,10 +25,10 @@ public record RecommendResponse(
      * @param busiId                  운영기관 코드 (운영기관 목록·검색 응답의 busiId와 같음)
      * @param orgName                 운영기관 이름 (원천에 없으면 null)
      * @param distanceKm              현재 위치 → 접근지점 추정 도로거리 (직선거리 × 보정계수)
-     * @param availabilityProbability 도착 시 가용 확률
-     * @param realtimeProbability     현재 상태 기준 가용 (1 / 0 / 판단 불가 null)
-     * @param baselineProbability     실시간 상태를 빼고 본 도착 구간 가용 확률 (AI 예측, 없으면 과거 통계)
-     * @param statisticalProbability  과거 같은 시간대 통계 기준 가용 확률 (AI 예측과 비교용)
+     * @param availabilityProbability 도착 시 쾌적 이용 확률(사용률 < 쾌적 기준)
+     * @param realtimeProbability     현재 사용률 기준 쾌적 (1 / 0 / 판단 불가 null)
+     * @param baselineProbability     실시간 상태를 빼고 본 도착 구간 쾌적 확률 (AI 예측, 없으면 과거 통계)
+     * @param statisticalProbability  과거 같은 시간대 통계 기준 쾌적 확률 (AI 예측과 비교용)
      * @param basis                   baseline 근거 (AI_FORECAST 또는 SAME_DAY_SLOT … PRIOR)
      * @param modelVersion            AI 예측을 썼으면 모델 버전, 아니면 null
      */

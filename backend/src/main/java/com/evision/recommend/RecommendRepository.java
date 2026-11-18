@@ -44,7 +44,8 @@ public class RecommendRepository {
 
     /**
      * 충전소별 도착 슬롯을 기준으로 과거 구간을 (요일, 도착 슬롯과 같은지) 단위로 센다.
-     * 커버링 인덱스 (station_id, window_start) INCLUDE (available) 로 Index Only Scan 한다 (V5).
+     * n = 사용률이 있는 구간 수, hits = 그중 사용률이 쾌적 기준 미만인 구간 수.
+     * 커버링 인덱스 (station_id, window_start) INCLUDE (occupancy_rate) 로 Index Only Scan 한다 (V8).
      * 결과는 충전소당 최대 14행 (요일 7 × 슬롯 일치 여부 2).
      */
     static final String HISTORY_COUNTS = """
@@ -54,8 +55,8 @@ public class RecommendRepository {
             SELECT o.station_id,
                    CAST(extract(isodow FROM o.window_start) AS int)          AS dow,
                    CAST(o.window_start AS time) = CAST(t.slot AS time)       AS same_slot,
-                   count(o.available)                                        AS n,
-                   count(*) FILTER (WHERE o.available)                       AS hits
+                   count(o.occupancy_rate)                                   AS n,
+                   count(*) FILTER (WHERE o.occupancy_rate < ?)              AS hits
             FROM target t
             JOIN occupancy_30m o ON o.station_id = t.station_id
             WHERE o.window_start >= ?
@@ -118,11 +119,13 @@ public class RecommendRepository {
     }
 
     /**
-     * [from, ∞) 구간의 과거 가용 통계를 미리 센다.
+     * [from, ∞) 구간의 과거 쾌적 통계를 미리 센다.
      *
-     * @param slotByStation 충전소별 도착 슬롯 (30분 단위 시각)
+     * @param slotByStation    충전소별 도착 슬롯 (30분 단위 시각)
+     * @param comfortThreshold 쾌적 기준 사용률 (미만이면 쾌적)
      */
-    public List<HistoryRow> countHistory(Map<Long, LocalTime> slotByStation, LocalDateTime from) {
+    public List<HistoryRow> countHistory(Map<Long, LocalTime> slotByStation, LocalDateTime from,
+            double comfortThreshold) {
         Long[] ids = slotByStation.keySet().toArray(Long[]::new);
         String[] slots = new String[ids.length];
         for (int i = 0; i < ids.length; i++) {
@@ -132,7 +135,8 @@ public class RecommendRepository {
             var ps = con.prepareStatement(HISTORY_COUNTS);
             ps.setArray(1, con.createArrayOf("bigint", ids));
             ps.setArray(2, con.createArrayOf("text", slots));
-            ps.setTimestamp(3, Timestamp.valueOf(from));
+            ps.setBigDecimal(3, BigDecimal.valueOf(comfortThreshold));
+            ps.setTimestamp(4, Timestamp.valueOf(from));
             return ps;
         }, (rs, i) -> new HistoryRow(rs.getLong("station_id"),
                 new SlotCount(DayOfWeek.of(rs.getInt("dow")), rs.getBoolean("same_slot"), rs.getInt("n"),

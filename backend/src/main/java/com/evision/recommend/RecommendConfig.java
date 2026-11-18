@@ -10,8 +10,9 @@ import org.springframework.context.annotation.Configuration;
 public class RecommendConfig {
 
     @Bean
-    public AvailabilityPredictor availabilityPredictor() {
-        return new AvailabilityPredictor(AvailabilityPredictor.Settings.defaults());
+    public AvailabilityPredictor availabilityPredictor(RecommendProperties properties) {
+        return new AvailabilityPredictor(
+                AvailabilityPredictor.Settings.withComfortThreshold(properties.comfortThreshold()));
     }
 
     @Bean
