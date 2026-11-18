@@ -26,7 +26,7 @@ public class RecommendController {
     @GetMapping("/recommendations")
     @Operation(summary = "충전소 추천",
             description = "노선 위 접근지점(휴게소·IC)에 매핑된 급속 충전소 중 남은 주행거리 × 안전비율 안에 있는 곳을 "
-                    + "도착 시 가용 확률·우회 거리·출력·대수로 점수 매겨 높은 순으로 준다. "
+                    + "도착 시 쾌적 이용 확률·우회 거리·출력·대수로 점수 매겨 높은 순으로 준다. "
                     + "후보가 없으면 빈 목록으로 200을 준다.")
     public RecommendResponse recommend(
             @Parameter(description = "현재 위도") @RequestParam double lat,

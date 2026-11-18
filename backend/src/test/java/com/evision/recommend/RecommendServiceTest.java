@@ -2,6 +2,7 @@ package com.evision.recommend;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
@@ -58,7 +59,7 @@ class RecommendServiceTest {
         service = new RecommendService(repository, stationQueryRepository,
                 new AvailabilityPredictor(AvailabilityPredictor.Settings.defaults()),
                 new RecommendScorer(RecommendScorer.Settings.defaults()),
-                new RecommendProperties(80, 1.3, 4, Duration.ofMinutes(90)), clock);
+                new RecommendProperties(80, 1.3, 4, Duration.ofMinutes(90), 0.5), clock);
 
         Route route = mock(Route.class);
         when(route.getId()).thenReturn(1L);
@@ -78,12 +79,12 @@ class RecommendServiceTest {
                 new StatusCountRow(3L, NormalizedStatus.AVAILABLE, 2L, NOW)));
         when(repository.maxFastOutput(anyCollection())).thenReturn(List.of(
                 new OutputRow(1L, 100), new OutputRow(3L, 200)));
-        when(repository.countHistory(any(), any())).thenReturn(List.of());
+        when(repository.countHistory(any(), any(), anyDouble())).thenReturn(List.of());
         when(repository.findForecasts(anyCollection(), any(), any(), any())).thenReturn(List.of());
     }
 
     @Test
-    void 진행_방향_후보를_도착_시_가용_확률로_정렬한다() {
+    void 진행_방향_후보를_도착_시_쾌적_확률로_정렬한다() {
         RecommendResponse r = service.recommend(condition(100, 37.0));
 
         assertThat(r.reachableKm()).isEqualTo(80.0);
@@ -127,9 +128,9 @@ class RecommendServiceTest {
     }
 
     @Test
-    void 과거_같은_시간대_만차_이력이_있으면_확률이_내려간다() {
-        // S3 도착 월 13:56 → 13:30 슬롯. 지난 월요일 같은 슬롯 3번 모두 만차
-        when(repository.countHistory(any(), eq(NOW.minusWeeks(4)))).thenReturn(List.of(
+    void 과거_같은_시간대_혼잡_이력이_있으면_확률이_내려간다() {
+        // S3 도착 월 13:56 → 13:30 슬롯. 지난 월요일 같은 슬롯 3번 모두 혼잡(사용률 50% 이상)
+        when(repository.countHistory(any(), eq(NOW.minusWeeks(4)), eq(0.5))).thenReturn(List.of(
                 new HistoryRow(3L, new SlotCount(DayOfWeek.MONDAY, true, 3, 0))));
 
         RecommendResponse.Item s3 = service.recommend(condition(100, 37.0)).recommendations().stream()
