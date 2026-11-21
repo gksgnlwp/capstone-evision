@@ -8,8 +8,8 @@
 .button:disabled { opacity: .5; }
 .button--full { width: 100%; }
 .card { padding: var(--space-4); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); }
-.badge { display: inline-flex; align-items: center; border-radius: var(--radius-pill); padding: 3px 9px; font-size: .6875rem; font-weight: 700; white-space: nowrap; }
-.badge--success { background: var(--color-primary-soft); color: var(--color-primary); }
+.badge { display: inline-flex; align-items: center; border-radius: 4px; padding: 3px 7px; font-size: .75rem; font-weight: 700; white-space: nowrap; }
+.badge--success { background: var(--color-success-soft); color: var(--color-success); }
 .badge--info { background: var(--color-info-soft); color: var(--color-info); }
 .badge--warning { background: var(--color-warning-soft); color: var(--color-warning); }
 .badge--danger { background: var(--color-danger-soft); color: var(--color-danger); }
@@ -35,4 +35,4 @@
 .dialog::backdrop { background: rgb(23 44 48 / 45%); }
 .dialog__heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
 .fatal-state { max-width: 480px; margin: 15vh auto; padding: 32px; display: flex; flex-direction: column; gap: 16px; }
-.environment-badge { display: inline-flex; align-items: center; border: 1px solid var(--color-border); border-radius: var(--radius-pill); padding: 3px 8px; color: var(--color-text-muted); font-size: 10px; font-weight: 700; letter-spacing: .06em; flex-shrink: 0; }
+.environment-badge { display: inline-flex; align-items: center; border: 1px solid var(--color-border); border-radius: var(--radius-pill); padding: 3px 8px; color: var(--color-text-muted); font-size: 11px; font-weight: 700; letter-spacing: .04em; flex-shrink: 0; }

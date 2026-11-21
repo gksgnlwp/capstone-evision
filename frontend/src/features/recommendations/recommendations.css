@@ -1,20 +1,37 @@
 .recommendation-page .card { min-width: 0; }
+.recommendation-page > .card { background: var(--color-neutral-soft); border: 0; border-radius: 10px; }
 .recommend-location { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px; background: var(--color-primary-soft); border-radius: var(--radius-md); }
 .recommend-location p { flex-basis: calc(100% - 28px); }
-.recommend-summary { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; color: var(--color-text-muted); font-size: var(--text-xs); }
-.recommend-arrival { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: var(--text-sm); }
+.recommend-summary { display: flex; flex-direction: column; gap: 3px; padding: 12px 0; border-block: 1px solid var(--color-border); color: var(--color-text-muted); font-size: var(--text-xs); }
+.recommend-summary strong { font-size: var(--text-sm); color: var(--color-text); }
+.recommend-collected { padding-left: 2px; margin-top: -8px; }
+.recommend-arrival { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--color-border); font-size: var(--text-sm); }
 .recommend-arrival strong { color: var(--color-primary); font-size: var(--text-xs); text-align: right; }
-.recommend-card { display: flex; flex-direction: column; gap: 11px; }
-.recommend-card--preferred { border-color: var(--color-primary); box-shadow: 0 0 0 2px var(--color-primary-soft); }
-.recommend-card h3 { font-size: var(--text-md); line-height: 1.4; }
-.recommend-rank, .compare-rank { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--color-primary); color: white; font-size: 12px; font-weight: 700; }
+.recommend-sort { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-bottom: 1px solid var(--color-border); }
+.recommend-sort button { min-height: 44px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--color-text-muted); font-size: var(--text-sm); font-weight: 600; }
+.recommend-sort button[aria-pressed='true'] { border-bottom-color: var(--color-success); color: var(--color-text); font-weight: 800; }
+.recommend-group { display: flex; flex-direction: column; gap: 0; background: white; }
+.recommend-group__heading { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 18px 2px 8px; border-bottom: 1px solid var(--color-border); }
+.recommend-group__heading h3 { font-size: var(--text-md); }
+.recommend-group__heading span { color: var(--color-text-muted); font-size: var(--text-xs); white-space: nowrap; }
+.recommend-card.card { display: flex; flex-direction: column; gap: 8px; border: 0; border-bottom: 1px solid var(--color-border); border-radius: 0; padding: 18px 2px; background: white; }
+.recommend-card--preferred.card { box-shadow: inset 3px 0 var(--color-success); padding-left: 12px; }
+.recommend-card h3 { font-size: 16px; line-height: 1.4; }
+.recommend-card__context { font-size: 13px; color: var(--color-text-muted); }
+.recommend-rank { color: var(--color-success); font-size: 13px; font-weight: 700; }
+.compare-rank { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 4px; background: var(--color-primary); color: white; font-size: 12px; font-weight: 700; }
 .recommend-compare { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; font-size: var(--text-sm); }
 .recommend-compare input { width: 17px; height: 17px; accent-color: var(--color-primary); }
-.recommend-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
-.recommend-metrics > div { display: flex; flex-direction: column; gap: 2px; padding: 9px 10px; border-radius: var(--radius-sm); background: var(--color-neutral-soft); }
+.recommend-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px; padding: 12px 0; }
+.recommend-metrics > div { display: flex; flex-direction: column; gap: 1px; }
 .recommend-metrics span { color: var(--color-text-muted); font-size: var(--text-xs); }
 .recommend-metrics strong { font-size: var(--text-sm); }
-.recommend-reason { padding: 10px 12px; background: var(--color-primary-soft); color: var(--color-primary); border-radius: var(--radius-sm); font-size: var(--text-xs); }
+.recommend-metrics > div:first-child strong { color: var(--color-success); font-size: 22px; line-height: 1.35; }
+.recommend-metrics > div:nth-child(2) strong { font-size: 18px; line-height: 1.5; }
+.recommend-card__basis { margin-top: -2px; }
+.recommend-reason { color: var(--color-text-muted); font-size: var(--text-xs); }
+.recommend-reason summary { cursor: pointer; width: fit-content; color: var(--color-text-muted); }
+.recommend-reason p { margin-top: 6px; line-height: 1.5; }
 .compare-table-wrap { overflow-x: auto; border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: white; }
 .compare-table { border-collapse: collapse; width: 100%; min-width: 340px; table-layout: fixed; font-size: var(--text-xs); }
 .compare-table th, .compare-table td { padding: 10px 8px; text-align: left; vertical-align: top; overflow-wrap: anywhere; border-bottom: 1px solid var(--color-border); }

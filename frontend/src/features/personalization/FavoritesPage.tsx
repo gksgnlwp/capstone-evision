@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { Star } from 'lucide-react';
 import { Badge, Button, EmptyState, ErrorState, LoadingState } from '../../components/ui';
 import { useAsync } from '../../hooks/useAsync';
-import { availabilityLabel, isCollectionDelayed, statusTime, statusTone } from '../search/searchUtils';
+import { availabilityLabel, collectionTime, isCollectionDelayed, statusTone } from '../search/searchUtils';
 import { personalizationService } from './personalizationService';
 import { favoriteLimit, removeFavorite, usePreferences } from './preferences';
 import type { FavoriteSummary } from './contracts';
@@ -43,7 +43,7 @@ export function FavoritesPage() {
             </div>
             {active ? <Badge tone={statusTone(station)}>{availabilityLabel(station)}</Badge> : <Badge tone="danger">{item.status === 'CLOSED' ? '운영 종료' : '정보 없음'}</Badge>}
             <button className={`favorite-remove ${active ? '' : 'favorite-remove--closed'}`} type="button" aria-label={`${station?.name || `충전소 ${item.stationId}`} 즐겨찾기 해제`} onClick={() => removeFavorite(item.stationId)}>{active ? <Star size={22} fill="currentColor" aria-hidden="true" /> : '삭제'}</button>
-            {active && <span className="favorite-row__time small muted">{result.data.statusCollectedAt ? `${statusTime(result.data.statusCollectedAt)} 수집` : '수집 정보 없음'}{station.suspectCount > 0 && ` · 상태 의심 ${station.suspectCount}대`}{delayed && <span className="favorite-delayed"> · 수집 지연</span>}</span>}
+            {active && <span className="favorite-row__time small muted">{result.data.statusCollectedAt ? `${collectionTime(result.data.statusCollectedAt)} 수집` : '수집 정보 없음'}{station.suspectCount > 0 && ` · 상태 의심 ${station.suspectCount}대`}{delayed && <span className="favorite-delayed"> · 수집 지연</span>}</span>}
           </article>;
         })}</div>
       </>}

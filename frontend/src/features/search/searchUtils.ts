@@ -45,6 +45,10 @@ export function statusTime(value: string | null) {
   const date = parseKst(value);
   return date ? new Intl.DateTimeFormat('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Seoul' }).format(date) : '갱신 정보 없음';
 }
+export function collectionTime(value: string | null) {
+  const date = parseKst(value);
+  return date ? new Intl.DateTimeFormat('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Seoul' }).format(date) : '수집 정보 없음';
+}
 export function isCollectionDelayed(value: string | null, now = Date.now()) {
   const collected = parseKst(value);
   return collected !== null && now - collected.getTime() >= 10 * 60 * 1000;

@@ -7,7 +7,7 @@ import { searchService } from './searchService';
 import { useLocationAccess } from './LocationContext';
 import { SearchFilters, type AccessFilter } from './SearchFilters';
 import { StationCard } from './StationCard';
-import { sortStations } from './searchUtils';
+import { collectionTime, isCollectionDelayed, sortStations } from './searchUtils';
 import type { SearchQuery } from './contracts';
 
 const loadRoutes = (signal: AbortSignal) => searchService.getRoutes(signal);
@@ -62,6 +62,7 @@ function RouteResults({ query, onMore }: { query: SearchQuery; onMore: (limit: n
   if (result.status === 'error') return <ErrorState message={result.error.message} onRetry={result.retry} />;
   return <div className="stack">
     <div className="row between"><h2>충전소 목록 <span className="result-count">{result.data.count}</span></h2><Button variant="ghost" className="compact-button" onClick={result.retry} aria-label="충전소 새로고침"><RefreshCw size={16} /></Button></div>
+    <p className="small muted">충전 상태 마지막 수집 {collectionTime(result.data.statusCollectedAt)}{isCollectionDelayed(result.data.statusCollectedAt, result.data.receivedAt) && ' · 수집 지연'}</p>
     {result.data.count === 0 ? <EmptyState title="조건에 맞는 충전소가 없어요" description="접근 유형이나 충전기 유형을 바꿔 보세요." /> : <div className="station-list">{sortStations(result.data.stations, position).map(station => <StationCard key={station.stationId} station={station} origin={position} receivedAt={result.data.receivedAt} statusCollectedAt={result.data.statusCollectedAt} />)}</div>}
     {result.data.truncated && (result.data.limit < 500 ? <Button variant="secondary" onClick={() => onMore(Math.min(500, result.data.limit + 100))}>충전소 더 보기</Button> : <p className="small muted">최대 500곳을 표시했습니다. 필터로 범위를 좁혀 주세요.</p>)}
   </div>;

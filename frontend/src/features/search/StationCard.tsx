@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
 import { Badge } from '../../components/ui';
 import type { Coordinates, StationSummary } from './contracts';
-import { availabilityLabel, distanceKm, isCollectionDelayed, statusTime, statusTone } from './searchUtils';
+import { availabilityLabel, collectionTime, distanceKm, isCollectionDelayed, statusTone } from './searchUtils';
 import { usePreferences } from '../personalization/preferences';
 
 export function StationCard({ station, origin, receivedAt, statusCollectedAt, selected = false }: { station: StationSummary; origin: Coordinates | null; receivedAt: number; statusCollectedAt: string | null; selected?: boolean }) {
@@ -15,13 +15,10 @@ export function StationCard({ station, origin, receivedAt, statusCollectedAt, se
   const tone = statusTone(station);
   return <article className={`station-card ${selected ? 'station-card--selected' : ''} ${preferred ? 'station-card--preferred' : ''}`}>
     <Link to={`/stations/${station.stationId}`} className="station-card__link" aria-label={`${station.name} 상세 보기`}>
-      <div className="row between"><h2>{station.name}</h2><ChevronRight size={16} aria-hidden="true" /></div>
-      <div className="row wrap station-card__tags"><Badge tone={rest ? 'success' : 'info'}>{rest ? '휴게소' : 'IC'}</Badge>{preferred && <Badge tone="success">선호 운영기관</Badge>}{rest?.direction && <span className="muted">{rest.direction}</span>}
+      <div className="station-card__heading"><div><p className="station-card__type">{rest ? '휴게소' : 'IC 인근'}{rest?.direction && ` · ${rest.direction}`}</p><h2>{station.name}</h2></div><ChevronRight size={17} aria-hidden="true" /></div>
+      <div className="row wrap station-card__tags">{preferred && <span className="station-card__preferred">선호 운영기관</span>}
         {ics.length > 1 && <span className="muted">IC {ics.length}곳 연결 · 1건 표시</span>}</div>
-      <div className="row between wrap station-card__status">
-        <span className="muted">{statusCollectedAt ? `${statusTime(statusCollectedAt)} 수집` : '수집 정보 없음'}</span>
-        <Badge tone={tone}>{availabilityLabel(station)}</Badge>
-      </div>
+      <div className="station-card__status"><strong className={`station-card__availability station-card__availability--${tone}`}>{availabilityLabel(station)}</strong><span>{statusCollectedAt ? `${collectionTime(statusCollectedAt)} 수집` : '수집 정보 없음'}</span></div>
       {(origin || detours.length > 0 || delayed || station.reliability !== 'NORMAL') && <div className="station-card__meta">
         {origin && <span>직선 {distanceKm(origin, station).toFixed(1)}km</span>}
         {detours.length > 0 && <span>IC 우회거리 약 {Math.min(...detours).toFixed(1)}km</span>}

@@ -14,5 +14,5 @@
 .pattern-table td { padding: 0; }
 .pattern-cell { display: block; padding: 9px 2px; border-radius: 5px; color: #102b28; font-weight: 700; }
 .pattern-legend { display: flex; align-items: center; gap: 7px; color: var(--color-text-muted); font-size: var(--text-xs); }
-.pattern-gradient { width: 90px; height: 8px; border-radius: var(--radius-pill); background: linear-gradient(90deg, #e4f3eb, #006c5b); }
+.pattern-gradient { width: 90px; height: 8px; border-radius: var(--radius-pill); background: linear-gradient(90deg, var(--color-primary-soft), var(--color-primary)); }
 @media (max-width: 390px) { .prediction-facts { grid-template-columns: 1fr; } }

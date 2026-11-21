@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { LocateFixed, Search } from 'lucide-react';
+import { LocateFixed, Search, SlidersHorizontal, X } from 'lucide-react';
 import { Button, EmptyState, ErrorState, LoadingState } from '../../components/ui';
 import { useAsync } from '../../hooks/useAsync';
 import { useLocationAccess } from './LocationContext';
@@ -8,7 +8,7 @@ import { SearchFilters, type AccessFilter } from './SearchFilters';
 import { searchService } from './searchService';
 import { StationCard } from './StationCard';
 import { StationMap } from './StationMap';
-import { sortStations } from './searchUtils';
+import { collectionTime, isCollectionDelayed, sortStations } from './searchUtils';
 import type { Bounds, Coordinates } from './contracts';
 import { config } from '../../config/env';
 
@@ -51,26 +51,30 @@ export function MapSearchPage() {
     }
   }
 
-  return <div className="stack map-search-page">
-    <div className="row between"><h1>내 주변 지도</h1><Button variant="ghost" className="compact-button" onClick={locate} loading={location.status === 'loading'} aria-label="현재 위치 확인"><LocateFixed size={20} /></Button></div>
-    {!location.position && <p className="small muted">위치 미확인 · 지도를 이동해 직접 찾아보세요.</p>}
-    {location.message && <p role="alert" className="small field__error">{location.message}</p>}
-    <SearchFilters accessType={accessType} chargerType={chargerType} onAccessChange={value => { setAccessType(value); setVisibleCount(10); setSelectedId(null); }} onChargerChange={value => { setChargerType(value); setVisibleCount(10); setSelectedId(null); }} />
-    <div className="map-frame" role="region" aria-label="충전소 지도">
+  return <div className="map-search-page">
+    <div className="map-search-header"><div><h1>충전소 지도</h1><p>가는 길 또는 주변에서 충전소 찾기</p></div><Button variant="ghost" className="compact-button" onClick={locate} loading={location.status === 'loading'} aria-label="현재 위치 확인"><LocateFixed size={20} /></Button></div>
+    {location.message && <p role="alert" className="small field__error map-search-message">{location.message}</p>}
+    <div className="map-frame map-search-canvas" role="region" aria-label="충전소 지도">
       <StationMap stations={stations} center={center} position={location.position} selectedId={selectedId} onSelect={setSelectedId} onBoundsChange={onBoundsChange} onAvailabilityChange={onAvailabilityChange} />
+      <div className="map-controls">
+        <Link to="/route" className="map-route-search"><Search size={18} aria-hidden="true" /><span>고속도로·목적지로 찾기</span></Link>
+        <div className="map-filter-bar"><SlidersHorizontal size={17} aria-hidden="true" /><SearchFilters accessType={accessType} chargerType={chargerType} onAccessChange={value => { setAccessType(value); setVisibleCount(10); setSelectedId(null); }} onChargerChange={value => { setChargerType(value); setVisibleCount(10); setSelectedId(null); }} /></div>
+      </div>
       {mapAvailable && <Button variant="secondary" className="map-search-button" disabled={!viewport || !changed} onClick={() => { setBounds(viewport); setSelectedId(null); setVisibleCount(10); }}><Search size={16} />이 영역 검색</Button>}
+      {selected && result.data && <div className="map-selected-sheet"><button className="map-selected-sheet__close" type="button" aria-label="선택한 충전소 닫기" onClick={() => setSelectedId(null)}><X size={18} /></button><StationCard station={selected} origin={location.position} receivedAt={result.data.receivedAt} statusCollectedAt={result.data.statusCollectedAt} selected /></div>}
     </div>
+    <section className="map-results" aria-label="검색 결과">
     {mapAvailable && <p className="map-legend"><span className="legend-dot legend-dot--success" />이용 가능 <span className="legend-dot legend-dot--warning" />상태 확인 필요 <span className="legend-dot legend-dot--danger" />이용 가능 0대 <span className="legend-dot legend-dot--neutral" />미확인 <span className="legend-dot legend-dot--cluster" />충전소 묶음</p>}
-    {selected && result.data && <StationCard station={selected} origin={location.position} receivedAt={result.data.receivedAt} statusCollectedAt={result.data.statusCollectedAt} selected />}
     {result.status === 'loading' && <LoadingState />}
     {result.status === 'error' && <ErrorState message={result.error.message} onRetry={result.retry} />}
     {result.status === 'success' && result.data && <>
       <h2>{mapAvailable ? '이 영역의 충전소' : '충전소 목록'} <span className="result-count">{stations.length}</span></h2>
+      <p className="small muted">충전 상태 마지막 수집 {collectionTime(result.data.statusCollectedAt)}{isCollectionDelayed(result.data.statusCollectedAt, result.data.receivedAt) && ' · 수집 지연'}</p>
       {stations.length === 0 ? <EmptyState title="이 영역에 충전소가 없어요" description="지도를 이동하거나 필터를 바꿔 보세요." /> : <div className="station-list">{sortStations(stations, location.position).slice(0, visibleCount).map(station => <StationCard key={station.stationId} station={station} origin={location.position} receivedAt={result.data!.receivedAt} statusCollectedAt={result.data!.statusCollectedAt} />)}</div>}
       {stations.length > visibleCount && <Button variant="secondary" onClick={() => setVisibleCount(value => value + 10)}>충전소 더 보기</Button>}
       {result.data.truncated && <p className="small muted">최대 500곳까지만 표시합니다. 지도를 확대하거나 필터로 범위를 좁혀 주세요.</p>}
     </>}
     <p className="search-footnote">{mapAvailable ? '개별 숫자는 정상으로 확인된 급속충전기의 이용 가능 대수입니다. 묶음 마커는 충전소 수이며, 누르면 확대됩니다.' : '카카오맵 연결 전에는 목록에서 충전소 화면 구성을 확인할 수 있습니다.'}</p>
-    <Link to="/route" className="text-link">노선·방향으로 찾기</Link>
+    </section>
   </div>;
 }
