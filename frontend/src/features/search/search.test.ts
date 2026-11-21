@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createSearchService } from './searchService';
 import { createMockClient } from '../../services/api/mockClient';
 import { searchHandlers, sampleRoutes, sampleStations } from './searchFixtures';
-import { availabilityLabel, deduplicateStations, distanceKm, isCollectionDelayed, parseKst, sortStations, statusTone } from './searchUtils';
+import { availabilityLabel, collectionTime, deduplicateStations, distanceKm, isCollectionDelayed, parseKst, sortStations, statusTone } from './searchUtils';
 import type { ApiClient } from '../../services/api';
 
 const service = createSearchService(createMockClient(searchHandlers, 0));
@@ -69,6 +69,7 @@ describe('노선·지도 검색과 백엔드 계약', () => {
   it('백엔드의 오프셋 없는 시각을 KST로 해석하고 거리를 직선으로 계산한다', () => {
     expect(parseKst('2026-10-28T14:05:00')?.toISOString()).toBe('2026-10-28T05:05:00.000Z');
     expect(parseKst('invalid')).toBeNull();
+    expect(collectionTime('2026-11-18T10:05:00')).toContain('11. 18.');
     expect(distanceKm({ lat: 37, lng: 127 }, { lat: 37, lng: 127 })).toBe(0);
     expect(isCollectionDelayed('2026-11-18T10:00:00', Date.parse('2026-11-18T10:11:00+09:00'))).toBe(true);
     expect(isCollectionDelayed('2026-11-18T10:05:00', Date.parse('2026-11-18T10:11:00+09:00'))).toBe(false);

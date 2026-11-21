@@ -13,6 +13,15 @@ test('DEV 추천 2곳을 선택해 실제 응답 항목으로 비교한다', asy
   await expect(page.getByRole('row', { name: /예상 대기 정보 없음 정보 없음/ })).toBeVisible();
 });
 
+test('빈자리 우선을 기본으로 두고 가까운 순으로 전환할 수 있다', async ({ page }) => {
+  await page.goto('/recommendations?routeId=1&direction=하행&remainingRangeKm=150&demo=1');
+  await expect(page.locator('.recommend-card').first().getByRole('heading')).toHaveText('안성휴게소(부산)');
+  await page.getByRole('button', { name: '가까운 순' }).click();
+  await expect(page.locator('.recommend-card').first().getByRole('heading')).toHaveText('기흥휴게소(부산)');
+  await page.getByRole('button', { name: '빈자리 우선' }).click();
+  await expect(page.locator('.recommend-card').first().getByRole('heading')).toHaveText('안성휴게소(부산)');
+});
+
 test('도착시각 선택은 화면에서 가능하지만 추천 결과에는 적용하지 않는다', async ({ page }) => {
   await page.goto('/recommendations?routeId=1&direction=하행&remainingRangeKm=150&demo=1');
   await page.getByRole('link', { name: /도착 예정시각 변경/ }).click();

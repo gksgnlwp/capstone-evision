@@ -6,9 +6,10 @@ import { config } from '../../config/env';
 import { useAsync } from '../../hooks/useAsync';
 import { useLocationAccess } from '../search/LocationContext';
 import { searchService } from '../search/searchService';
+import { collectionTime, isCollectionDelayed } from '../search/searchUtils';
 import { usePreferences } from '../personalization/preferences';
 import { recommendationService } from './recommendationService';
-import { accessLabel, arrivalLabel, basisLabel, operatorLabel, probabilityLabel, reasonLabel } from './recommendationUtils';
+import { accessLabel, arrivalLabel, basisLabel, groupRecommendations, operatorLabel, probabilityLabel, reasonLabel, sortRecommendations, type RecommendationSort } from './recommendationUtils';
 import { demoPosition, queryFromParams } from './queryState';
 import type { RecommendationItem, RecommendationQuery } from './contracts';
 
@@ -54,33 +55,39 @@ export function RecommendationPage() {
 }
 
 function RecommendationResults({ query, params, selected, onToggle }: { query: RecommendationQuery; params: URLSearchParams; selected: number[]; onToggle: (id: number) => void }) {
+  const [sort, setSort] = useState<RecommendationSort>('score');
   const { position, routeId, direction, remainingRangeKm, chargerType } = query;
   const loader = useCallback((signal: AbortSignal) => recommendationService.getRecommendations({ position, routeId, direction, remainingRangeKm, chargerType, limit: 5 }, signal), [position, routeId, direction, remainingRangeKm, chargerType]);
   const result = useAsync(loader);
+  const collectionLoader = useCallback((signal: AbortSignal) => searchService.search({ routeId, direction, limit: 1 }, signal), [routeId, direction]);
+  const collection = useAsync(collectionLoader);
   if (result.status === 'loading') return <LoadingState label="추천 충전소를 찾고 있습니다." />;
   if (result.status === 'error') return <ErrorState message={result.error.message} onRetry={result.retry} />;
   const compareParams = new URLSearchParams(params);
   compareParams.set('ids', selected.join(','));
+  const groups = groupRecommendations(sortRecommendations(result.data.recommendations, sort));
   return <div className="stack">
     <div className="row between"><h2>추천 상위 {result.data.recommendations.length}곳</h2><Button variant="ghost" className="compact-button" onClick={result.retry} aria-label="추천 결과 새로고침"><RefreshCw size={16} /></Button></div>
-    <div className="recommend-summary card"><span>추천 가능한 거리 약 {result.data.reachableKm.toFixed(1)}km</span><span>후보 {result.data.candidateCount}곳 · 범위 밖 {result.data.unreachableCount}곳</span></div>
-    <Link className="recommend-arrival card" to={`/recommendations/arrival?${params}`}><span>도착 예정시각 변경</span><strong>{params.get('arrivalOffsetMin') ? `선택한 ${params.get('arrivalOffsetMin')}분 후 · 추천 미적용` : '현재 서버 추정 시각 기준'}</strong></Link>
+    <div className="recommend-summary"><strong>주행 가능 범위 약 {result.data.reachableKm.toFixed(1)}km</strong><span>후보 {result.data.candidateCount}곳 · 범위 밖 {result.data.unreachableCount}곳</span></div>
+    <p className="recommend-collected small muted">{collection.status === 'success' ? collection.data.statusCollectedAt ? `충전 상태 마지막 수집 ${collectionTime(collection.data.statusCollectedAt)}${isCollectionDelayed(collection.data.statusCollectedAt, collection.data.receivedAt) ? ' · 수집 지연' : ''}` : '충전 상태 수집 시각 정보 없음' : collection.status === 'error' ? '충전 상태 수집 시각 확인 불가' : '충전 상태 수집 시각 확인 중'}</p>
+    <Link className="recommend-arrival" to={`/recommendations/arrival?${params}`}><span>도착 예정시각 변경</span><strong>{params.get('arrivalOffsetMin') ? `선택한 ${params.get('arrivalOffsetMin')}분 후 · 추천 미적용` : '서버 추정 시각 기준'}</strong></Link>
+    {result.data.recommendations.length > 0 && <div className="recommend-sort" role="group" aria-label="추천 결과 정렬"><button type="button" aria-pressed={sort === 'score'} onClick={() => setSort('score')}>빈자리 우선</button><button type="button" aria-pressed={sort === 'distance'} onClick={() => setSort('distance')}>가까운 순</button></div>}
     {result.data.recommendations.length === 0 ? <EmptyState title="추천 가능한 충전소가 없어요" description="현재 위치, 노선 또는 남은 주행 가능 거리를 확인해 주세요." />
-      : <div className="station-list">{result.data.recommendations.map(item => <RecommendationCard key={item.stationId} item={item} selected={selected.includes(item.stationId)} onToggle={() => onToggle(item.stationId)} />)}</div>}
+      : <div className="station-list">{groups.map(group => group.items.length > 1 ? <section key={group.key} className="recommend-group" aria-label={`${group.label} 충전소 ${group.items.length}곳`}><div className="recommend-group__heading"><h3>{group.label}</h3><span>운영기관별 {group.items.length}곳</span></div>{group.items.map(item => <RecommendationCard key={item.stationId} item={item} selected={selected.includes(item.stationId)} onToggle={() => onToggle(item.stationId)} />)}</section> : <RecommendationCard key={group.key} item={group.items[0]} selected={selected.includes(group.items[0].stationId)} onToggle={() => onToggle(group.items[0].stationId)} />)}</div>}
     {selected.length === 2 && <Link className="button button--primary button--full" to={`/compare?${compareParams}`}>선택한 2곳 비교하기</Link>}
-    <p className="search-footnote">추천 순위는 이용 가능 확률·우회거리·출력·충전기 수·주행 가능 범위를 함께 반영합니다. 도로거리는 직선거리 보정에 따른 추정치이며, 대기시간은 현재 API에서 제공하지 않습니다.</p>
+    <p className="search-footnote">빈자리 우선은 서버의 추천 점수 순서로, 이용 가능 확률과 우회거리·출력·충전기 수·주행 가능 범위를 함께 반영합니다. 정상 급속충전기가 없는 충전소는 추천 후보에서 제외됩니다. 가까운 순은 서버가 계산한 추정 도로거리 기준입니다. 대기시간은 현재 API에서 제공하지 않습니다.</p>
   </div>;
 }
 
 function RecommendationCard({ item, selected, onToggle }: { item: RecommendationItem; selected: boolean; onToggle: () => void }) {
   const { operatorIds } = usePreferences();
   return <article className={`recommend-card card ${operatorIds.includes(item.busiId) ? 'recommend-card--preferred' : ''}`}>
-    <div className="row between"><span className="recommend-rank">{item.rank}</span><label className="recommend-compare"><input type="checkbox" checked={selected} onChange={onToggle} aria-label={`${item.name} 비교 선택`} /> 비교</label></div>
+    <div className="row between"><span className="recommend-rank" aria-label={`추천 ${item.rank}위`}>{item.rank}순위</span><label className="recommend-compare"><input type="checkbox" checked={selected} onChange={onToggle} aria-label={`${item.name} 비교 선택`} /> 비교</label></div>
     <h3>{item.name}</h3>
-    <div className="row wrap"><Badge tone={item.access.accessType === 'REST_AREA' ? 'success' : 'info'}>{accessLabel(item)}</Badge><Badge tone={item.basis === 'AI_FORECAST' ? 'success' : 'neutral'}>{basisLabel(item)}</Badge>{operatorIds.includes(item.busiId) && <Badge tone="success">선호 운영기관</Badge>}</div>
-    <p className="small muted">운영기관 · {operatorLabel(item)}</p>
-    <div className="recommend-metrics"><div><span>이동</span><strong>약 {item.distanceKm.toFixed(1)}km</strong></div><div><span>도착</span><strong>{arrivalLabel(item.eta)}</strong></div><div><span>이용 확률</span><strong>{probabilityLabel(item.availabilityProbability)}</strong></div><div><span>예상 대기</span><strong>정보 없음</strong></div></div>
-    <p className="recommend-reason">추천 판단 정보 · {reasonLabel(item)}</p>
+    <p className="recommend-card__context">{accessLabel(item)} · {operatorLabel(item)}{operatorIds.includes(item.busiId) && ' · 선호 운영기관'}</p>
+    <div className="recommend-metrics"><div><span>도착 시 이용 확률</span><strong>{probabilityLabel(item.availabilityProbability)}</strong></div><div><span>현재 위치에서</span><strong>약 {item.distanceKm.toFixed(1)}km</strong></div><div><span>도착 예상</span><strong>{arrivalLabel(item.eta)}</strong></div><div><span>예상 대기</span><strong>정보 없음</strong></div></div>
+    <div className="recommend-card__basis"><Badge tone={item.basis === 'AI_FORECAST' ? 'success' : 'neutral'}>{basisLabel(item)}</Badge></div>
+    <details className="recommend-reason"><summary>추천 기준 보기</summary><p>{reasonLabel(item)}</p></details>
     <Link className="text-link" to={`/stations/${item.stationId}`}>충전소 상세 보기</Link>
   </article>;
 }

@@ -7,7 +7,8 @@ export const sampleRoutes: RouteItem[] = [
   { routeId: 2, routeNo: '50', routeName: '영동선', directions: ['상행', '하행'], restAreaStations: 2, icStations: 0 },
 ];
 function rest(name: string, direction = '하행', routeId = 1): AccessPoint {
-  return { accessType: 'REST_AREA', restAreaId: name.length * 100 + routeId, restAreaName: name, direction,
+  const restAreaId = Array.from(name).reduce((id, char) => (id * 31 + (char.codePointAt(0) || 0)) % 1_000_000, routeId);
+  return { accessType: 'REST_AREA', restAreaId, restAreaName: name, direction,
     icId: null, icName: null, facilityType: null, routeId, routeNo: routeId === 1 ? '1' : '50', routeName: routeId === 1 ? '경부선' : '영동선', detourKm: null };
 }
 function ic(id: number, name: string, detourKm: number): AccessPoint {

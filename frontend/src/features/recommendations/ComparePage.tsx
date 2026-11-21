@@ -10,6 +10,8 @@ import { accessLabel, arrivalLabel, basisLabel, externalDirectionsUrl, operatorL
 import type { RecommendationItem, RecommendationQuery } from './contracts';
 import { RecommendationMap } from './RecommendationMap';
 import { usePreferences } from '../personalization/preferences';
+import { searchService } from '../search/searchService';
+import { collectionTime, isCollectionDelayed } from '../search/searchUtils';
 
 export function ComparePage() {
   const [params] = useSearchParams();
@@ -26,6 +28,8 @@ function CompareResults({ query, ids, params }: { query: RecommendationQuery; id
   const { position, routeId, direction, remainingRangeKm, chargerType } = query;
   const loader = useCallback((signal: AbortSignal) => recommendationService.getRecommendations({ position, routeId, direction, remainingRangeKm, chargerType, limit: 5 }, signal), [position, routeId, direction, remainingRangeKm, chargerType]);
   const result = useAsync(loader);
+  const collectionLoader = useCallback((signal: AbortSignal) => searchService.search({ routeId, direction, limit: 1 }, signal), [routeId, direction]);
+  const collection = useAsync(collectionLoader);
   if (result.status === 'loading') return <LoadingState label="비교 정보를 불러오고 있습니다." />;
   if (result.status === 'error') return <ErrorState message={result.error.message} onRetry={result.retry} />;
   const items = ids.map(id => result.data.recommendations.find(item => item.stationId === id)).filter((item): item is RecommendationItem => !!item);
@@ -43,7 +47,7 @@ function CompareResults({ query, ids, params }: { query: RecommendationQuery; id
     { label: '예측 근거', value: basisLabel },
   ];
   return <div className="stack compare-page">
-    <div><Link className="text-link" to={`/recommendations?${params}`}>← 추천 결과</Link><h1>추천 비교</h1><p className="small muted">선택한 2곳 · 서버 추정 도착시각 기준</p></div>
+    <div><Link className="text-link" to={`/recommendations?${params}`}>← 추천 결과</Link><h1>추천 비교</h1><p className="small muted">선택한 2곳 · 서버 추정 도착시각 기준</p><p className="small muted">{collection.status === 'success' ? `충전 상태 마지막 수집 ${collectionTime(collection.data.statusCollectedAt)}${isCollectionDelayed(collection.data.statusCollectedAt, collection.data.receivedAt) ? ' · 수집 지연' : ''}` : collection.status === 'error' ? '충전 상태 수집 시각 확인 불가' : '충전 상태 수집 시각 확인 중'}</p></div>
     <div className="compare-table-wrap"><table className="compare-table"><thead><tr><th scope="col">항목</th>{items.map(item => <th key={item.stationId} scope="col"><span className="compare-rank">{item.rank}위</span>{item.name}{operatorIds.includes(item.busiId) && <Badge tone="success">선호 운영기관</Badge>}</th>)}</tr></thead><tbody>{rows.map(row => <tr key={row.label}><th scope="row">{row.label}</th>{items.map(item => <td key={item.stationId}>{row.value(item)}</td>)}</tr>)}</tbody></table></div>
     <section className="card stack"><h2>추천 판단 정보</h2>{items.map(item => <p key={item.stationId} className="small"><Badge tone={item.access.accessType === 'REST_AREA' ? 'success' : 'info'}>{item.rank}위</Badge> {reasonLabel(item)}</p>)}</section>
     <RecommendationMap items={items} />

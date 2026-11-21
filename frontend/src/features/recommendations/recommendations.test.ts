@@ -3,7 +3,7 @@ import type { ApiClient } from '../../services/api';
 import { createMockClient } from '../../services/api/mockClient';
 import { recommendationHandlers } from './recommendationFixtures';
 import { createRecommendationService } from './recommendationService';
-import { arrivalLabel, basisLabel, externalDirectionsUrl, operatorLabel, reasonLabel } from './recommendationUtils';
+import { arrivalLabel, basisLabel, externalDirectionsUrl, groupRecommendations, operatorLabel, reasonLabel, sortRecommendations } from './recommendationUtils';
 
 const query = { position: { lat: 37.23, lng: 127.10 }, routeId: 1, direction: '하행', remainingRangeKm: 150 };
 
@@ -32,6 +32,21 @@ describe('추천 API와 비교 데이터', () => {
     const result = await createRecommendationService(createMockClient(recommendationHandlers, 0)).getRecommendations({ ...query, remainingRangeKm: 10 });
     expect(result.unreachableCount).toBeGreaterThan(0);
     expect(result.recommendations.every(item => item.distanceKm <= result.reachableKm)).toBe(true);
+  });
+  it('서버 추천 순위를 기본으로 두고 가까운 순은 거리로 정렬한다', async () => {
+    const { recommendations } = await createRecommendationService(createMockClient(recommendationHandlers, 0)).getRecommendations(query);
+    expect(sortRecommendations(recommendations, 'score')).toEqual(recommendations);
+    const nearest = sortRecommendations(recommendations, 'distance');
+    expect(nearest.map(item => item.distanceKm)).toEqual([...nearest.map(item => item.distanceKm)].sort((a, b) => a - b));
+    expect(nearest.map(item => item.rank).sort((a, b) => a - b)).toEqual(recommendations.map(item => item.rank));
+  });
+  it('같은 휴게소의 운영기관별 결과를 묶되 각 충전소를 유지한다', async () => {
+    const { recommendations } = await createRecommendationService(createMockClient(recommendationHandlers, 0)).getRecommendations(query);
+    const first = recommendations[0];
+    const another = { ...recommendations[1], access: { ...first.access }, name: '같은 휴게소의 다른 운영기관' };
+    const groups = groupRecommendations([first, recommendations[2], another]);
+    expect(groups).toHaveLength(2);
+    expect(groups[0].items.map(item => item.stationId)).toEqual([first.stationId, another.stationId]);
   });
   it('잘못된 입력과 누락된 확률을 성공 결과로 바꾸지 않는다', async () => {
     const service = createRecommendationService(createMockClient(recommendationHandlers, 0));

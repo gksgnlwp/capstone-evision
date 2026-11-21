@@ -2,6 +2,28 @@ import type { RecommendationItem } from './contracts';
 
 export function probabilityLabel(value: number) { return `${Math.round(value * 100)}%`; }
 export function operatorLabel(item: RecommendationItem) { return item.orgName || item.busiId; }
+export type RecommendationSort = 'score' | 'distance';
+export function sortRecommendations(items: RecommendationItem[], sort: RecommendationSort) {
+  if (sort === 'score') return items;
+  return [...items].sort((a, b) => a.distanceKm - b.distanceKm || a.rank - b.rank);
+}
+export function groupRecommendations(items: RecommendationItem[]) {
+  const groups: { key: string; label: string | null; items: RecommendationItem[] }[] = [];
+  const byKey = new Map<string, (typeof groups)[number]>();
+  for (const item of items) {
+    const rest = item.access;
+    const key = rest.accessType === 'REST_AREA' && rest.restAreaId !== null
+      ? `rest:${rest.restAreaId}:${rest.direction || ''}` : `station:${item.stationId}`;
+    let group = byKey.get(key);
+    if (!group) {
+      group = { key, label: rest.accessType === 'REST_AREA' ? `${rest.restAreaName || item.name}${rest.direction ? ` · ${rest.direction}` : ''}` : null, items: [] };
+      byKey.set(key, group);
+      groups.push(group);
+    }
+    group.items.push(item);
+  }
+  return groups;
+}
 export function basisLabel(item: RecommendationItem) {
   if (item.basis === 'AI_FORECAST') return 'AI 예측 기반';
   if (item.basis === 'PRIOR') return '기본 통계 기반';
