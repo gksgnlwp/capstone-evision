@@ -146,3 +146,32 @@ python predict_batch.py --data recent.pkl --models models_c50 --horizons 1,2 \
 - 안전장치: 최근 구간이 90분보다 오래됐으면 예측을 만들지 않고 종료 코드 2로 끝나며 기존 결과 파일은 그대로 남습니다. 결과는 임시 파일에 쓴 뒤 바꿔치기합니다. 학습에 쓰지 않은 충전소(품질 낮은 충전소)는 예측하지 않습니다.
 - 서버 환경: `pip install xgboost pandas numpy scikit-learn holidays`.
 - 검증: 단위 테스트 35개(배치 4개 포함: 두 예측 구간의 대상 시각, 오래된 데이터 건너뛰기, 직전 결과 보존, 학습 때 예측과 같은 값). 단, 샌드박스에서는 sklearn 대용 모듈로 시험했으므로 실제 XGBoost로 한 번 더 확인이 필요합니다(Colab 노트북의 마지막 셀).
+
+## 서버 DB 연동 (export_recent.py → prep_5m.py → predict_batch.py → upsert_forecast.py)
+
+`run_forecast.sh` 하나가 30분마다 아래 네 단계를 차례로 돌립니다. 추천 API는 `occupancy_forecast`에서 도착 구간 값을 읽습니다 (규격: `docs/forecast/README.md`).
+
+| 단계 | 파일 | 하는 일 |
+| --- | --- | --- |
+| 1 | `export_recent.py` | DB에서 최근 9일을 뽑아 11/13 학습 데이터와 **같은 파일·컬럼**으로 저장 (`occupancy_5m.csv.gz`, `status_history_raw.csv.gz`, `chargers.csv`, `stations.csv`, `station_access.csv`) |
+| 2 | `prep_5m.py` | 학습 때와 같은 방식으로 30분 표 + 5분 변수 생성 |
+| 3 | `predict_batch.py` | 30분 후·60분 후 예측 CSV |
+| 4 | `upsert_forecast.py` | CSV → `occupancy_forecast` upsert (한 트랜잭션, 형식 검사 후) |
+
+- 5분 시점 상태는 백엔드 30분 집계(`OccupancyAggregationRepository.POINT_COUNTS`)와 같은 규칙입니다: 시점 이하 최신 이력, 6시간 넘은 충전중은 미확인, `(t-10분, t+1분]` 수집 회차가 있으면 유효.
+  시험 DB에서 백엔드 SQL과 4,320개(충전소×시점) 값이 모두 같음을 확인했습니다. 서버에서는 `python export_recent.py --out-dir work/export --check-30m`으로 DB `occupancy_30m`과 다시 대조할 수 있습니다.
+- CSV → 테이블 컬럼: `target_time`→`target_window_start`, `predicted_at`→`generated_at`, `horizon_min`은 저장하지 않음. DB에 없는 충전소는 건너뜁니다.
+- 실패하면 DB를 바꾸지 않습니다. 예측이 끊겨도 추천은 90분 뒤부터 과거 통계로 자동 대체합니다.
+
+서버 설정 (주소·비밀번호는 저장소에 적지 않고 서버 환경변수로만 둡니다):
+
+```bash
+pip install -r requirements.txt
+export EVISION_FORECAST_DB_URL='postgresql://<계정>:<비밀번호>@<호스트>:5432/<DB>'   # occupancy_forecast INSERT/UPDATE, 나머지 SELECT 권한
+export FORECAST_MODEL_DIR=models_c50        # 쾌적 기준 0.5로 학습한 h1·h2 모델 (meta_h*.json 의 comfort_thr 가 0.5인지 확인)
+./run_forecast.sh                           # 한 번 돌려 보고
+# cron: 5,35 * * * * cd <forecast 폴더> && ./run_forecast.sh >> <로그 파일> 2>&1
+```
+
+종료 코드: 0 성공 / 1 오류 / 2 최근 데이터가 90분보다 오래돼 건너뜀 / 3 `--check-30m` 대조 불일치.
+테스트: `pytest test_db_pipeline.py` (DB까지 보려면 마이그레이션을 적용한 빈 DB 주소를 `EVISION_TEST_DB_URL`로 준다).

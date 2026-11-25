@@ -4,6 +4,7 @@ numpy
 scikit-learn
 holidays
 pytest
-# DB에서 직접 읽을 때만 필요
+# 서버 예측 배치(export_recent.py, upsert_forecast.py)
+psycopg2-binary
+# train_xgb.py --db 로 직접 읽을 때만 필요
 # sqlalchemy
-# psycopg2-binary
