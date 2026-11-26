@@ -144,3 +144,34 @@ def test_upsert_overwrites_and_skips_unknown_station():
     finally:
         conn.rollback()
         conn.close()
+
+
+# --------------------------------------------------------------------------- 메모리 절약 실행 (predict_lowmem.py)
+def test_chunked_prep_equals_prep_5m(tmp_path):
+    """충전소 묶음으로 나눠 만든 30분 표가 prep_5m 으로 한 번에 만든 표와 같다."""
+    import predict_lowmem as L
+
+    rng = np.random.default_rng(5)
+    ch = pd.DataFrame({"charger_id": range(1, 13), "station_id": np.repeat([3, 5, 8, 9], 3), "output_kw": 100})
+    hist = pd.DataFrame({"charger_id": rng.integers(1, 13, 300),
+                         "status_updated_at": [ts(int(m)) for m in rng.integers(-200, 590, 300)],
+                         "normalized_status": rng.choice(E.STATUSES, 300)}).drop_duplicates(["charger_id", "status_updated_at"])
+    hist["status_code"] = hist["normalized_status"].map({"AVAILABLE": 2, "CHARGING": 3, "UNAVAILABLE": 5, "UNKNOWN": 9})
+    hist["collected_at"] = hist["status_updated_at"] + pd.Timedelta(minutes=2)
+    occ5 = E.build_occupancy_5m(ts(0), ts(600), ch, hist, [ts(m) for m in range(0, 600, 5)])
+    occ5.to_csv(tmp_path / "occupancy_5m.csv.gz", index=False)
+    hist[["charger_id", "status_code", "status_updated_at", "collected_at"]].to_csv(tmp_path / "status_history_raw.csv.gz", index=False)
+    ch.to_csv(tmp_path / "chargers.csv", index=False)
+
+    o = pd.read_csv(tmp_path / "occupancy_5m.csv.gz", parse_dates=["ts"])
+    w = prep_5m.windows_from_5m(o)
+    raw = pd.read_csv(tmp_path / "status_history_raw.csv.gz", parse_dates=["status_updated_at", "collected_at"])
+    full = w.merge(prep_5m.charging_duration_features(raw, ch, np.sort(w["window_start"].unique())),
+                   on=["station_id", "window_start"], how="left")
+    full["max_output_kw"] = full["station_id"].map(ch.groupby("station_id")["output_kw"].max())
+
+    got = L.build_data30(tmp_path, chunk_stations=1)
+    k = ["station_id", "window_start"]
+    a = full.sort_values(k).reset_index(drop=True)
+    b = got.sort_values(k).reset_index(drop=True)[a.columns].astype(a.dtypes.to_dict())
+    pd.testing.assert_frame_equal(a, b)

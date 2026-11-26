@@ -22,6 +22,7 @@ export_recent.py — 서버 DB에서 최근 N일 데이터를 뽑아 prep_5m.py 
 import argparse
 import os
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -122,47 +123,58 @@ def valid_points(points, run_starts):
     return hi > lo
 
 
-def point_counts(points, chargers, history, stuck_hours=STUCK_HOURS, chunk=288):
+def point_counts(points, chargers, history, stuck_hours=STUCK_HOURS, chunk=48):
     """
     충전소 x 시점별 정규화 상태 수. points: 정렬된 시점, chargers: charger_id/station_id,
     history: charger_id, status_updated_at, normalized_status.
+    메모리를 아끼려고 상태를 작은 정수 코드로 다루고, 시점을 chunk 개(기본 4시간)씩 나눠 계산한다.
     """
-    h = history[["charger_id", "status_updated_at", "normalized_status"]].copy()
-    h["status_updated_at"] = h["status_updated_at"].astype("datetime64[ns]")
-    h["normalized_status"] = h["normalized_status"].fillna("UNKNOWN")
-    h = h.sort_values("status_updated_at", kind="stable")
+    code = {s: i for i, s in enumerate(STATUSES)}
+    unknown = code["UNKNOWN"]
+    h = pd.DataFrame({
+        "charger_id": history["charger_id"].to_numpy(),
+        "status_updated_at": history["status_updated_at"].to_numpy().astype("datetime64[ns]"),
+        "ns": history["normalized_status"].map(code).fillna(unknown).astype("int8").to_numpy(),
+    }).sort_values("status_updated_at", kind="stable")
     ch = chargers[["charger_id", "station_id"]].drop_duplicates("charger_id")
-    stuck = pd.Timedelta(hours=stuck_hours)
+    st_index = pd.Index(np.sort(ch["station_id"].unique()))
+    ch_st = st_index.get_indexer(ch["station_id"])
+    stuck = pd.Timedelta(hours=stuck_hours).to_timedelta64()
     points = pd.DatetimeIndex(points).astype("datetime64[ns]")
+    n_st, n_pt = len(st_index), len(points)
+    counts = np.zeros((len(STATUSES), n_st, n_pt), dtype="int16")
 
-    parts = []
-    for i in range(0, len(points), chunk):
+    for i in range(0, n_pt, chunk):
         pts = points[i:i + chunk]
         left = pd.DataFrame({
             "t": np.repeat(pts.to_numpy(), len(ch)),
             "charger_id": np.tile(ch["charger_id"].to_numpy(), len(pts)),
-            "station_id": np.tile(ch["station_id"].to_numpy(), len(pts)),
         })
         m = pd.merge_asof(left, h, left_on="t", right_on="status_updated_at", by="charger_id",
                           direction="backward", allow_exact_matches=True)
-        ns = m["normalized_status"].fillna("UNKNOWN").to_numpy(dtype=object)
-        is_stuck = (ns == "CHARGING") & (m["status_updated_at"] < m["t"] - stuck).to_numpy()
-        ns = np.where(is_stuck, "UNKNOWN", ns)
-        d = pd.DataFrame({"station_id": m["station_id"], "ts": m["t"]})
-        for s in STATUSES:
-            d[s.lower()] = (ns == s).astype("int32")
-        parts.append(d.groupby(["station_id", "ts"], sort=False).sum().reset_index())
-    out = pd.concat(parts, ignore_index=True)
-    return out.sort_values(["station_id", "ts"], kind="stable").reset_index(drop=True)
+        ns = m["ns"].fillna(unknown).to_numpy().astype("int8")
+        is_stuck = (ns == code["CHARGING"]) & (m["status_updated_at"].to_numpy() < m["t"].to_numpy() - stuck)
+        ns[is_stuck] = unknown
+        st = np.tile(ch_st, len(pts))
+        pt = np.repeat(np.arange(i, i + len(pts)), len(ch))
+        np.add.at(counts, (ns, st, pt), 1)
+
+    out = pd.DataFrame({
+        "station_id": np.repeat(st_index.to_numpy(), n_pt),
+        "ts": np.tile(points.to_numpy(), n_st),
+    })
+    for k, s in enumerate(STATUSES):
+        out[s.lower()] = counts[k].ravel().astype("int32")
+    return out
 
 
 def build_occupancy_5m(start, end, chargers, history, run_starts):
     points = pd.date_range(start, end - pd.Timedelta(minutes=POINT_MIN), freq=f"{POINT_MIN}min")
     counts = point_counts(points, chargers, history)
-    valid = pd.Series(valid_points(points, run_starts).astype("int8"), index=points)
-    counts["valid"] = counts["ts"].map(valid).astype("int8")
-    fast = chargers.groupby("station_id")["charger_id"].nunique().rename("fast_charger_count")
-    counts = counts.merge(fast, left_on="station_id", right_index=True)
+    n_st = len(counts) // len(points)                      # point_counts 는 충전소 x 시점 격자 (충전소 바깥 반복)
+    counts["valid"] = np.tile(valid_points(points, run_starts).astype("int8"), n_st)
+    fast = chargers.groupby("station_id")["charger_id"].nunique()
+    counts["fast_charger_count"] = counts["station_id"].map(fast).astype("int16")
     cols = ["station_id", "ts", "valid", "fast_charger_count", "available", "charging", "unavailable", "unknown"]
     return counts[cols]
 
@@ -187,13 +199,17 @@ def connect(url):
     return psycopg2.connect(url)
 
 
-def read_sql(conn, sql, params=None, parse_dates=None):
-    with conn.cursor() as cur:
-        cur.execute(sql, params or {})
-        cols = [c.name for c in cur.description]
-        df = pd.DataFrame(cur.fetchall(), columns=cols)
-    for c in parse_dates or []:
-        df[c] = pd.to_datetime(df[c])
+def read_sql(conn, sql, params=None, parse_dates=None, dtype=None):
+    """COPY 로 임시 파일에 받아 read_csv 로 읽는다. 행마다 파이썬 객체를 만들지 않아 메모리를 적게 쓴다."""
+    with conn.cursor() as cur, tempfile.TemporaryFile() as f:
+        query = cur.mogrify(sql, params or {}).decode()
+        cur.copy_expert(f"COPY ({query}) TO STDOUT WITH CSV HEADER", f)
+        f.seek(0)
+        parts = pd.read_csv(f, dtype=dtype, parse_dates=parse_dates or [], chunksize=200_000)  # 나눠 읽어 문자열 파싱 메모리를 줄인다
+        df = pd.concat(parts, ignore_index=True)
+    for c, t in (dtype or {}).items():                                # 나눠 읽으면 범주형이 object 로 풀릴 수 있어 다시 맞춘다
+        if c in df.columns and t == "category":
+            df[c] = df[c].astype("category")
     return df
 
 
@@ -204,6 +220,8 @@ def main(argv=None):
     ap.add_argument("--now", default=None, help="기준 시각 (시험용, 기본은 한국 현재 시각)")
     ap.add_argument("--db-url", default=None, help="기본은 환경변수 EVISION_FORECAST_DB_URL")
     ap.add_argument("--check-30m", action="store_true", help="다시 만든 30분 값이 DB occupancy_30m 과 같은지 비교")
+    ap.add_argument("--pickle", action="store_true",
+                    help="5분 표·상태 이력을 .pkl 로 저장 (서버 배치용: 다시 읽을 때 메모리를 적게 씀). 기본은 학습 데이터와 같은 .csv.gz")
     a = ap.parse_args(argv)
 
     url = a.db_url or os.environ.get("EVISION_FORECAST_DB_URL")
@@ -223,8 +241,8 @@ def main(argv=None):
         if chargers.empty:
             print("[오류] 서비스 대상 급속충전기가 없습니다.")
             return 1
-        history = read_sql(conn, HISTORY_SQL,
-                           p, parse_dates=["status_updated_at", "collected_at"])
+        history = read_sql(conn, HISTORY_SQL, p, parse_dates=["status_updated_at", "collected_at"],
+                           dtype={"charger_id": "int64", "status_code": "category", "normalized_status": "category"})
         runs = read_sql(conn, RUNS_SQL, {"start": (start - VALID_LOOKBACK).to_pydatetime(),
                                          "end": (end + VALID_TOLERANCE).to_pydatetime()}, parse_dates=["started_at"])
         stations = read_sql(conn, STATIONS_SQL)
@@ -237,8 +255,17 @@ def main(argv=None):
     print(f"5분 표: {len(occ5):,}행, 충전소 {occ5['station_id'].nunique()}곳, 기간 {start} ~ {end}, "
           f"유효 시점 {valid_share:.1%} ({time.time() - t0:.0f}초)")
 
-    occ5.to_csv(out / "occupancy_5m.csv.gz", index=False)
-    history.drop(columns=["normalized_status"]).to_csv(out / "status_history_raw.csv.gz", index=False)
+    raw = history[["charger_id", "status_code", "status_updated_at", "collected_at"]]
+    for name in ("occupancy_5m", "status_history_raw"):         # 다른 형식의 예전 파일이 남아 잘못 읽히지 않게 지운다
+        (out / (f"{name}.csv.gz" if a.pickle else f"{name}.pkl")).unlink(missing_ok=True)
+    if a.pickle:                                          # CSV 로 읽었을 때와 같은 자료형으로 맞춘다
+        small = {"station_id": "int32", "fast_charger_count": "int16", "available": "int16", "charging": "int16",
+                 "unavailable": "int16", "unknown": "int16"}
+        occ5.astype(small).to_pickle(out / "occupancy_5m.pkl")
+        raw.astype({"status_code": "int16"}).to_pickle(out / "status_history_raw.pkl")
+    else:
+        occ5.to_csv(out / "occupancy_5m.csv.gz", index=False)
+        raw.to_csv(out / "status_history_raw.csv.gz", index=False)
     chargers.to_csv(out / "chargers.csv", index=False)
     stations.to_csv(out / "stations.csv", index=False)
     access.to_csv(out / "station_access.csv", index=False)

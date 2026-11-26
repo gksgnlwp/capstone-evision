@@ -29,13 +29,14 @@ fi
 trap 'rmdir "$LOCK" 2>/dev/null || true' EXIT
 
 echo "$(date '+%F %T') 예측 배치 시작"
-"$PY" export_recent.py --out-dir "$WORK/export" --days "${FORECAST_DAYS:-9}"
-"$PY" prep_5m.py --occ "$WORK/export/occupancy_5m.csv.gz" --raw "$WORK/export/status_history_raw.csv.gz" \
-  --chargers "$WORK/export/chargers.csv" --out "$WORK/data30.pkl"
+# 메모리 1GB 미만 서버용: 단계마다 다른 프로세스로 돌려 앞 단계 메모리가 남지 않게 한다 (단계별 최대 약 0.5GB)
+export MALLOC_ARENA_MAX="${MALLOC_ARENA_MAX:-2}"
+"$PY" export_recent.py --out-dir "$WORK/export" --days "${FORECAST_DAYS:-9}" --pickle
+"$PY" predict_lowmem.py prep --export-dir "$WORK/export" --out "$WORK/data30.pkl"
 
 set +e
-"$PY" predict_batch.py --data "$WORK/data30.pkl" --models "$MODELS" --horizons 1,2 \
-  --access "$WORK/export/station_access.csv" --stations "$WORK/export/stations.csv" --out "$WORK/prediction.csv"
+"$PY" predict_lowmem.py predict --data "$WORK/data30.pkl" --export-dir "$WORK/export" --models "$MODELS" \
+  --horizons 1,2 --out "$WORK/prediction.csv"
 rc=$?
 set -e
 if [ "$rc" -ne 0 ]; then
