@@ -59,7 +59,8 @@ class RecommendServiceTest {
         service = new RecommendService(repository, stationQueryRepository,
                 new AvailabilityPredictor(AvailabilityPredictor.Settings.defaults()),
                 new RecommendScorer(RecommendScorer.Settings.defaults()),
-                new RecommendProperties(80, 1.3, 4, Duration.ofMinutes(90), 0.5), clock);
+                new RecommendProperties(80, 1.3, 4, Duration.ofMinutes(90), 0.5),
+                new RouteHeadingResolver(repository), clock);
 
         Route route = mock(Route.class);
         when(route.getId()).thenReturn(1L);
@@ -117,6 +118,25 @@ class RecommendServiceTest {
         RecommendResponse r = service.recommend(condition(100, null));
 
         assertThat(r.candidateCount()).isEqualTo(3);
+    }
+
+    @Test
+    void 하행이면_목적지가_없어도_지나온_IC와_휴게소는_뺀다() {
+        when(repository.findRoutePoints(1L)).thenReturn(RouteAxisTest.northSouthRoute());   // 하행 = 남쪽
+
+        RecommendResponse down = service.recommend(condition(100, null, "하행"));
+        RecommendResponse up = service.recommend(condition(100, null, "상행"));
+
+        assertThat(down.recommendations()).extracting(RecommendResponse.Item::statId).containsExactly("ST000002");
+        assertThat(up.recommendations()).extracting(RecommendResponse.Item::statId)
+                .containsExactlyInAnyOrder("ST000001", "ST000003");
+    }
+
+    @Test
+    void 노선_방향을_정할_수_없으면_앞뒤를_거르지_않는다() {
+        when(repository.findRoutePoints(1L)).thenReturn(List.of());
+
+        assertThat(service.recommend(condition(100, null, "하행")).candidateCount()).isEqualTo(3);
     }
 
     @Test
@@ -178,7 +198,11 @@ class RecommendServiceTest {
     }
 
     private static RecommendCondition condition(double rangeKm, Double destLat) {
-        return RecommendCondition.of(36.0, 127.0, 1, null, rangeKm, destLat, destLat == null ? null : 127.0,
+        return condition(rangeKm, destLat, null);
+    }
+
+    private static RecommendCondition condition(double rangeKm, Double destLat, String direction) {
+        return RecommendCondition.of(36.0, 127.0, 1, direction, rangeKm, destLat, destLat == null ? null : 127.0,
                 null, null);
     }
 

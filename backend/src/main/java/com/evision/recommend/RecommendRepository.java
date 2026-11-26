@@ -163,6 +163,22 @@ public class RecommendRepository {
                 .fetch();
     }
 
+    /** 노선의 IC(이름·방향 없음)와 휴게소 좌표. 노선 모양·방향 계산용 */
+    public record RoutePointRow(String name, String direction, double latitude, double longitude) {
+    }
+
+    static final String ROUTE_POINTS = """
+            SELECT NULL AS name, NULL AS direction, latitude, longitude FROM interchange WHERE route_id = ?
+            UNION ALL
+            SELECT name, direction, latitude, longitude FROM rest_area WHERE route_id = ?
+            ORDER BY latitude, longitude
+            """;
+
+    public List<RoutePointRow> findRoutePoints(long routeId) {
+        return jdbc.query(ROUTE_POINTS, (rs, i) -> new RoutePointRow(rs.getString("name"), rs.getString("direction"),
+                rs.getDouble("latitude"), rs.getDouble("longitude")), routeId, routeId);
+    }
+
     /** 방향은 휴게소에만 있다. 지정하면 그 방향·양방향 휴게소와 IC가 남는다. */
     private BooleanExpression directionMatches(String direction) {
         if (direction == null) {
