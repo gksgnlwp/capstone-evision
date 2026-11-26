@@ -36,7 +36,7 @@ import com.evision.station.query.StationQueryRepository;
 import com.evision.station.query.StationQueryRepository.StatusCountRow;
 
 /**
- * 충전소 추천. 노선 위 후보 → 도착 시 가용 확률 예측 → 점수 정렬.
+ * 충전소 추천. 노선 위 후보 → 도착 시 쾌적 이용 확률 예측 → 점수 정렬.
  *
  * <p>노선 이정 데이터가 없어서 거리는 직선거리 × roadDistanceFactor 로 근사한다.
  * 한 충전소가 여러 접근지점에 매핑돼 있으면 (거리 + 우회) 가 가장 짧은 접근지점 하나로 본다.
@@ -89,7 +89,7 @@ public class RecommendService {
             etaSlots.put(l.station().getId(), window.toLocalTime());
         }
         Map<Long, List<SlotCount>> history = repository
-                .countHistory(etaSlots, now.minusWeeks(properties.historyWeeks())).stream()
+                .countHistory(etaSlots, now.minusWeeks(properties.historyWeeks()), properties.comfortThreshold()).stream()
                 .collect(Collectors.groupingBy(HistoryRow::stationId,
                         Collectors.mapping(HistoryRow::count, Collectors.toList())));
         Map<String, Forecast> forecasts = forecasts(ids, etaWindows, now);

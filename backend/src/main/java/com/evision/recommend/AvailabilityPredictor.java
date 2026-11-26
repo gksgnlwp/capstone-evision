@@ -7,21 +7,22 @@ import java.time.LocalTime;
 import java.util.List;
 
 /**
- * 도착 시점 충전소 가용 확률 예측. DB와 무관한 순수 계산이다.
+ * 도착 시점 충전소 쾌적 이용 확률 예측. DB와 무관한 순수 계산이다.
+ * 쾌적 = 사용률 &lt; comfortThreshold (AI 예측 occupancy_forecast.p_available 과 같은 기준, 박상현 님과 합의 2026-11-18).
+ * 사용률 = 충전 중 / (사용 가능 + 충전 중). 고장·점검·미확인 충전기는 분모에서 뺀다 (occupancy_30m.occupancy_rate 와 같은 규칙).
  *
  * <pre>
- * P(도착 시 가용) = α·P_now + (1-α)·P_base,   α = exp(-도착까지 분 / realtimeTauMinutes)
+ * P(도착 시 쾌적) = α·P_now + (1-α)·P_base,   α = exp(-도착까지 분 / realtimeTauMinutes)
  *
  * P_base : AI 예측(occupancy_forecast)이 있으면 그 값, 없으면 P_hist (과거 통계)
  *
- * P_now  : 현재 급속충전기 상태. AVAILABLE 1기 이상 → 1, 관측 완전(UNKNOWN 0기) + AVAILABLE 0기 → 0, 그 외 NULL
- *          (OccupancyWindowCalculator.PointObservation.availability()와 같은 규칙). NULL이면 α = 0
- * P_hist : occupancy_30m.available 의 계층 베타 평활 (구체적 → 일반 순서로 상위 값을 사전값으로 쓴다)
+ * P_now  : 현재 급속충전기 사용률이 기준 미만이면 1, 이상이면 0. 분모(사용 가능 + 충전 중)가 0이면 NULL → α = 0
+ * P_hist : occupancy_30m.occupancy_rate &lt; 기준인 구간 비율의 계층 베타 평활 (구체적 → 일반 순서로 상위 값을 사전값으로 쓴다)
  *            L4 충전소 전체       p4 = (s4 + k·priorMean) / (n4 + k)
  *            L3 같은 30분 슬롯     p3 = (s3 + k·p4)        / (n3 + k)
  *            L2 + 같은 요일 유형   p2 = (s2 + k·p3)        / (n2 + k)     (평일 / 주말)
  *            L1 + 같은 요일        p1 = (s1 + k·p2)        / (n1 + k)     → P_hist
- *          n = available이 NULL이 아닌 구간 수, s = 그중 true 수, k = priorStrength
+ *          n = occupancy_rate 가 NULL이 아닌 구간 수, s = 그중 기준 미만 수, k = priorStrength
  * </pre>
  * 이력이 없으면 P_hist = priorMean 이 되므로 수집 초기(콜드스타트)에도 값이 나온다.
  * 수준별 (n, s) 는 HistoryStats 로 받는다. 서비스는 DB에서 미리 센 값(fromAggregates)을, 테스트는 구간 목록(from)을 쓴다.
@@ -33,11 +34,14 @@ public final class AvailabilityPredictor {
     public static final int SLOT_MINUTES = 30;
 
     /**
-     * @param priorMean          이력이 전혀 없을 때 쓰는 가용 확률
+     * @param priorMean          이력이 전혀 없을 때 쓰는 쾌적 확률
      * @param priorStrength      사전값을 관측 몇 건만큼 믿을지 (k). 클수록 이력이 적을 때 사전값에 붙는다
      * @param realtimeTauMinutes 실시간 상태 가중치가 1/e 로 줄어드는 도착까지 시간(분)
+     * @param comfortThreshold   쾌적 기준 사용률. 사용률이 이 값 미만이면 쾌적 (0 초과 1 이하)
      */
-    public record Settings(double priorMean, double priorStrength, double realtimeTauMinutes) {
+    public record Settings(double priorMean, double priorStrength, double realtimeTauMinutes, double comfortThreshold) {
+
+        public static final double DEFAULT_COMFORT_THRESHOLD = 0.5;
 
         public Settings {
             if (priorMean < 0 || priorMean > 1) {
@@ -46,35 +50,50 @@ public final class AvailabilityPredictor {
             if (priorStrength <= 0 || realtimeTauMinutes <= 0) {
                 throw new IllegalArgumentException("priorStrength, realtimeTauMinutes는 양수여야 합니다.");
             }
+            if (comfortThreshold <= 0 || comfortThreshold > 1) {
+                throw new IllegalArgumentException("comfortThreshold는 0 초과 1 이하여야 합니다: " + comfortThreshold);
+            }
+        }
+
+        public Settings(double priorMean, double priorStrength, double realtimeTauMinutes) {
+            this(priorMean, priorStrength, realtimeTauMinutes, DEFAULT_COMFORT_THRESHOLD);
         }
 
         /** TODO(확인 필요): 수집 데이터가 쌓이면 백테스트로 조정 */
         public static Settings defaults() {
-            return new Settings(0.7, 4.0, 30.0);
+            return withComfortThreshold(DEFAULT_COMFORT_THRESHOLD);
+        }
+
+        public static Settings withComfortThreshold(double comfortThreshold) {
+            return new Settings(0.7, 4.0, 30.0, comfortThreshold);
         }
     }
 
     /** 현재 급속충전기 상태별 대수 (charger.current_normalized_status 집계) */
     public record CurrentStatus(int available, int charging, int unavailable, int unknown) {
 
-        /** 1.0 / 0.0 / null (판단 불가) */
-        public Double probability() {
-            if (available >= 1) {
-                return 1.0;
-            }
-            return unknown == 0 && charging + unavailable > 0 ? 0.0 : null;
+        /** 현재 사용률 = 충전 중 / (사용 가능 + 충전 중). 분모가 0이면 null (전부 고장·미확인이거나 충전기 없음) */
+        public Double occupancyRate() {
+            int denominator = available + charging;
+            return denominator == 0 ? null : (double) charging / denominator;
+        }
+
+        /** 사용률이 기준 미만이면 1.0, 이상이면 0.0, 판단 불가면 null */
+        public Double probability(double comfortThreshold) {
+            Double rate = occupancyRate();
+            return rate == null ? null : rate < comfortThreshold ? 1.0 : 0.0;
         }
     }
 
-    /** occupancy_30m 한 행. available이 NULL이면 계산에서 빠진다 */
-    public record WindowSample(LocalDateTime windowStart, Boolean available) {
+    /** occupancy_30m 한 행. occupancyRate 가 NULL이면 계산에서 빠진다 */
+    public record WindowSample(LocalDateTime windowStart, Double occupancyRate) {
     }
 
     /** AI 예측 한 건 (occupancy_forecast). probability 는 0~1 */
     public record Forecast(double probability, String modelVersion) {
     }
 
-    /** 수준별 표본 수 n 과 그중 가용(true) 수 hits */
+    /** 수준별 표본 수 n 과 그중 쾌적(사용률 < 기준) 수 hits */
     public record Count(int n, int hits) {
 
         public static final Count EMPTY = new Count(0, 0);
@@ -93,16 +112,17 @@ public final class AvailabilityPredictor {
 
         public static final HistoryStats EMPTY = new HistoryStats(Count.EMPTY, Count.EMPTY, Count.EMPTY, Count.EMPTY);
 
-        /** 30분 구간 목록에서 센다. available 이 NULL 인 구간은 뺀다 */
-        public static HistoryStats from(LocalDateTime arrival, List<WindowSample> samples) {
+        /** 30분 구간 목록에서 센다. occupancyRate 가 NULL 인 구간은 뺀다 */
+        public static HistoryStats from(LocalDateTime arrival, List<WindowSample> samples, double comfortThreshold) {
             LocalTime slot = floorToSlot(arrival.toLocalTime());
             HistoryStats stats = EMPTY;
             for (WindowSample s : samples) {
-                if (s.available() == null) {
+                if (s.occupancyRate() == null) {
                     continue;
                 }
                 stats = stats.add(arrival, s.windowStart().getDayOfWeek(),
-                        floorToSlot(s.windowStart().toLocalTime()).equals(slot), 1, s.available() ? 1 : 0);
+                        floorToSlot(s.windowStart().toLocalTime()).equals(slot), 1,
+                        s.occupancyRate() < comfortThreshold ? 1 : 0);
             }
             return stats;
         }
@@ -129,7 +149,7 @@ public final class AvailabilityPredictor {
         }
     }
 
-    /** 미리 센 값 한 줄: 요일, 도착 슬롯과 같은 시간대인지, 표본 수, 가용 수 */
+    /** 미리 센 값 한 줄: 요일, 도착 슬롯과 같은 시간대인지, 표본 수, 쾌적 수 */
     public record SlotCount(DayOfWeek dayOfWeek, boolean sameSlot, int n, int hits) {
     }
 
@@ -139,7 +159,7 @@ public final class AvailabilityPredictor {
     }
 
     /**
-     * @param probability      최종 가용 확률 (0~1)
+     * @param probability      최종 쾌적 이용 확률 (0~1)
      * @param realtime         P_now (판단 불가면 null)
      * @param baseline         P_base (AI 예측 또는 과거 통계)
      * @param statistical      P_hist (AI 예측이 있어도 비교용으로 계산)
@@ -174,7 +194,7 @@ public final class AvailabilityPredictor {
     public Prediction predict(LocalDateTime now, LocalDateTime eta, CurrentStatus current, List<WindowSample> samples,
             Forecast forecast) {
         LocalDateTime arrival = eta.isBefore(now) ? now : eta;
-        return predict(now, eta, current, HistoryStats.from(arrival, samples), forecast);
+        return predict(now, eta, current, HistoryStats.from(arrival, samples, settings.comfortThreshold()), forecast);
     }
 
     /**
@@ -190,7 +210,7 @@ public final class AvailabilityPredictor {
         double baseline = forecast == null ? h.probability : clamp(forecast.probability());
         Basis basis = forecast == null ? h.basis : Basis.AI_FORECAST;
 
-        Double realtime = current == null ? null : current.probability();
+        Double realtime = current == null ? null : current.probability(settings.comfortThreshold());
         double alpha = realtime == null ? 0.0 : Math.exp(-minutesAhead / settings.realtimeTauMinutes());
         double p = realtime == null ? baseline : alpha * realtime + (1 - alpha) * baseline;
 
