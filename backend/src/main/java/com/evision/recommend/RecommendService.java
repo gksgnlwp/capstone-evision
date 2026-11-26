@@ -41,7 +41,9 @@ import com.evision.station.query.StationQueryRepository.StatusCountRow;
  * <p>노선 이정 데이터가 없어서 거리는 직선거리 × roadDistanceFactor 로 근사한다.
  * 한 충전소가 여러 접근지점에 매핑돼 있으면 (거리 + 우회) 가 가장 짧은 접근지점 하나로 본다.
  * 도착 구간의 AI 예측(occupancy_forecast)이 있고 forecastMaxAge 안에 만든 것이면 과거 통계 대신 쓴다.
+ * 상행/하행을 지정하면 지나온(진행방향 뒤쪽) 접근지점은 뺀다 ({@link RouteHeadingResolver}).
  * 쿼리 수는 후보 건수와 관계없이 5회 (후보, 상태 집계, 최대 출력, 과거 통계 집계, AI 예측).
+ * 노선별 첫 요청에만 노선 좌표 조회 1회가 더 있다 (결과는 캐시).
  * 과거 통계는 구간 행을 가져오지 않고 DB에서 (요일, 도착 슬롯 일치) 단위로 센 값만 받는다.
  */
 @Service
@@ -53,11 +55,17 @@ public class RecommendService {
     private final AvailabilityPredictor predictor;
     private final RecommendScorer scorer;
     private final RecommendProperties properties;
+    private final RouteHeadingResolver headingResolver;
     private final Clock clock;
 
+    /** 진행방향 뒤쪽이어도 이 거리 안이면 후보로 둔다 (지금 막 지나는 휴게소·IC, 좌표 오차) */
+    static final double BEHIND_TOLERANCE_KM = 2;
+
     public RecommendService(RecommendRepository repository, StationQueryRepository stationQueryRepository,
-            AvailabilityPredictor predictor, RecommendScorer scorer, RecommendProperties properties, Clock clock) {
+            AvailabilityPredictor predictor, RecommendScorer scorer, RecommendProperties properties,
+            RouteHeadingResolver headingResolver, Clock clock) {
         this.repository = repository;
+        this.headingResolver = headingResolver;
         this.stationQueryRepository = stationQueryRepository;
         this.predictor = predictor;
         this.scorer = scorer;
@@ -143,15 +151,25 @@ public class RecommendService {
         }
     }
 
-    /** 목적지가 있으면 진행 방향(목적지에 더 가까워지는 쪽) 접근지점만 남기고, 충전소별로 가장 가까운 하나를 고른다. */
+    /**
+     * 진행방향 앞쪽 접근지점만 남기고, 충전소별로 가장 가까운 하나를 고른다.
+     * 상행/하행을 지정하면 노선 위 위치로 현재 위치보다 뒤(BEHIND_TOLERANCE_KM 초과)인 곳을 뺀다.
+     * IC 근처 충전소는 방향 구분이 없어 이 규칙이 없으면 지나온 IC도 후보가 된다.
+     * 목적지가 있으면 목적지에 더 가까워지는 접근지점만 남긴다.
+     */
     Map<Long, Located> nearestAccessPerStation(RecommendCondition c, List<StationAccess> accesses) {
         Map<Long, Located> nearest = new LinkedHashMap<>();
+        RouteHeadingResolver.Heading heading = headingResolver.heading(c.routeId(), c.direction());
         Double currentToDestination = c.hasDestination()
                 ? GeoDistance.km(c.latitude(), c.longitude(), c.destinationLatitude(), c.destinationLongitude())
                 : null;
         for (StationAccess a : accesses) {
             double[] point = coordinates(a);
             if (point == null) {
+                continue;
+            }
+            if (heading != null
+                    && heading.aheadKm(c.latitude(), c.longitude(), point[0], point[1]) < -BEHIND_TOLERANCE_KM) {
                 continue;
             }
             if (currentToDestination != null && GeoDistance.km(point[0], point[1], c.destinationLatitude(),
