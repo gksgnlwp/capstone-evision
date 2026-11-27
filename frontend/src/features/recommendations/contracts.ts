@@ -6,6 +6,10 @@ const probability = z.number().min(0).max(1);
 
 export const recommendationSchema = z.object({
   requestedAt: z.string(), reachableKm: z.number().nonnegative(),
+  route: z.object({
+    routeId: z.number().int().positive(), routeNo: z.string().nullable(),
+    routeName: z.string().nullable(), direction: z.string().nullable(), autoSelected: z.boolean(),
+  }).nullable(),
   candidateCount: z.number().int().nonnegative(), unreachableCount: z.number().int().nonnegative(),
   recommendations: z.array(z.object({
     rank: z.number().int().positive(), stationId: z.number().int().positive(), statId: z.string(), name: z.string(),
@@ -35,17 +39,20 @@ export type RecommendationResponse = z.infer<typeof recommendationSchema>;
 export type RecommendationItem = RecommendationResponse['recommendations'][number];
 export interface RecommendationQuery {
   position: Coordinates;
-  routeId: number;
-  direction?: string;
+  destination: Coordinates;
   remainingRangeKm: number;
   chargerType?: string;
   limit?: number;
 }
 
+export function validCoordinates({ lat, lng }: Coordinates) {
+  return Number.isFinite(lat) && lat >= -90 && lat <= 90 && Number.isFinite(lng) && lng >= -180 && lng <= 180;
+}
+
 export function validateRecommendationQuery(query: RecommendationQuery) {
-  const { position, routeId, remainingRangeKm, limit } = query;
-  if (!Number.isFinite(position.lat) || position.lat < -90 || position.lat > 90 || !Number.isFinite(position.lng) || position.lng < -180 || position.lng > 180) throw new Error('현재 위치를 다시 확인해 주세요.');
-  if (!Number.isSafeInteger(routeId) || routeId < 1) throw new Error('고속도로 노선을 선택해 주세요.');
+  const { position, destination, remainingRangeKm, limit } = query;
+  if (!validCoordinates(position)) throw new Error('현재 위치를 다시 확인해 주세요.');
+  if (!validCoordinates(destination)) throw new Error('목적지를 다시 선택해 주세요.');
   if (!Number.isFinite(remainingRangeKm) || remainingRangeKm <= 0 || remainingRangeKm > 1000) throw new Error('남은 주행 가능 거리는 0 초과 1000km 이하로 입력해 주세요.');
   if (limit !== undefined && (!Number.isInteger(limit) || limit < 1 || limit > 20)) throw new Error('추천 건수는 1~20곳이어야 합니다.');
 }

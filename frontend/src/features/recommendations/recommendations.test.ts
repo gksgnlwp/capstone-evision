@@ -3,18 +3,20 @@ import type { ApiClient } from '../../services/api';
 import { createMockClient } from '../../services/api/mockClient';
 import { recommendationHandlers } from './recommendationFixtures';
 import { createRecommendationService } from './recommendationService';
+import { demoDestination } from './queryState';
 import { arrivalLabel, basisLabel, externalDirectionsUrl, groupRecommendations, operatorLabel, reasonLabel, sortRecommendations } from './recommendationUtils';
 
-const query = { position: { lat: 37.23, lng: 127.10 }, routeId: 1, direction: '하행', remainingRangeKm: 150 };
+const query = { position: { lat: 37.23, lng: 127.10 }, destination: demoDestination, remainingRangeKm: 150 };
 
 describe('추천 API와 비교 데이터', () => {
-  it('백엔드의 필수 좌표·노선·주행거리 파라미터를 보낸다', async () => {
+  it('현재 위치·목적지 좌표·주행거리만 보내고 노선과 방향은 응답에서 읽는다', async () => {
     const fixture = await createRecommendationService(createMockClient(recommendationHandlers, 0)).getRecommendations(query);
     const request = vi.fn().mockResolvedValue(fixture);
     await createRecommendationService({ request } as ApiClient).getRecommendations(query);
     expect(request).toHaveBeenCalledWith('recommendations', { signal: undefined, credentials: 'omit', query: {
-      lat: 37.23, lng: 127.10, routeId: 1, direction: '하행', remainingRangeKm: 150, chargerType: undefined, limit: 5,
+      lat: 37.23, lng: 127.10, destLat: 35.1151, destLng: 129.0415, remainingRangeKm: 150, chargerType: undefined, limit: 5,
     } });
+    expect(fixture.route).toEqual({ routeId: 1, routeNo: '1', routeName: '경부선', direction: '하행', autoSelected: true });
   });
   it('휴게소와 IC 결과를 서버 순서대로 읽고 확률·근거를 보존한다', async () => {
     const result = await createRecommendationService(createMockClient(recommendationHandlers, 0)).getRecommendations(query);
@@ -51,6 +53,7 @@ describe('추천 API와 비교 데이터', () => {
   it('잘못된 입력과 누락된 확률을 성공 결과로 바꾸지 않는다', async () => {
     const service = createRecommendationService(createMockClient(recommendationHandlers, 0));
     await expect(service.getRecommendations({ ...query, remainingRangeKm: 0 })).rejects.toThrow('남은 주행');
+    await expect(service.getRecommendations({ ...query, destination: { lat: 127.1, lng: 35.1 } })).rejects.toThrow('목적지');
     await expect(createRecommendationService({ request: vi.fn().mockResolvedValue({ recommendations: [{ rank: 1 }] }) } as ApiClient).getRecommendations(query)).rejects.toMatchObject({ kind: 'invalid-response' });
   });
   it('오프셋 없는 서버 도착시각을 한국 시각으로 표시한다', () => {

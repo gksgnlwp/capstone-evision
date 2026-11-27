@@ -2,6 +2,7 @@ import type { MockHandler } from '../../services/api/mockClient';
 import { sampleStations } from '../search/searchFixtures';
 import { distanceKm } from '../search/searchUtils';
 import type { RecommendationItem } from './contracts';
+import { demoDestination } from './queryState';
 
 // 시연용 값입니다. 실제 추천·확률·주행거리·도착시각이 아닙니다.
 const demo = [
@@ -15,21 +16,24 @@ const operatorNames: Record<string, string> = { ME: '환경부', ST: 'SK일렉�
 
 export const recommendationHandlers: Record<string, MockHandler> = {
   'GET recommendations': ({ query = {} }) => {
-    const routeId = Number(query.routeId);
     const position = { lat: Number(query.lat), lng: Number(query.lng) };
     const range = Number(query.remainingRangeKm);
     const reachableKm = Math.round(range * .8 * 10) / 10;
+    const now = new Date();
+    if (Number(query.destLat) !== demoDestination.lat || Number(query.destLng) !== demoDestination.lng) {
+      return { requestedAt: now.toISOString(), route: null, reachableKm, candidateCount: 0, unreachableCount: 0, recommendations: [] };
+    }
+    const route = { routeId: 1, routeNo: '1', routeName: '경부선', direction: '하행', autoSelected: true };
     const candidates = demo.flatMap(row => {
       const station = sampleStations.find(s => s.stationId === row.stationId);
       if (!station) return [];
-      const access = station.accesses.find(a => a.routeId === routeId &&
-        (!query.direction || a.accessType === 'IC' || a.direction === query.direction || a.direction === '양방향'));
+      const access = station.accesses.find(a => a.routeId === route.routeId &&
+        (a.accessType === 'IC' || a.direction === route.direction || a.direction === '양방향'));
       if (!access || (query.chargerType && !station.chargerTypes.includes(String(query.chargerType)))) return [];
       const distance = Math.round(distanceKm(position, station) * 1.3 * 10) / 10;
       return [{ station, access, row, distance }];
     });
     const reachable = candidates.filter(c => c.distance <= reachableKm);
-    const now = new Date();
     const recommendations: RecommendationItem[] = reachable.slice(0, Math.min(Number(query.limit ?? 5), 20)).map(({ station, access, row, distance }, index) => {
       const etaMinutes = Math.max(1, Math.round(distance / 80 * 60));
       return {
@@ -48,7 +52,7 @@ export const recommendationHandlers: Record<string, MockHandler> = {
         scoreBreakdown: { availability: row.probability, detour: row.detour, power: 1, capacity: station.fastChargerCount / 10, progress: 0 },
       };
     });
-    return { requestedAt: now.toISOString(), reachableKm, candidateCount: candidates.length,
+    return { requestedAt: now.toISOString(), route, reachableKm, candidateCount: candidates.length,
       unreachableCount: candidates.length - reachable.length, recommendations };
   },
 };

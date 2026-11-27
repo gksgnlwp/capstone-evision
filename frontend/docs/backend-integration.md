@@ -30,7 +30,9 @@
 
 ## 기능별 구현 방식
 
-3번 작업의 추천은 현재 백엔드 `RecommendController`의 공개 `GET /api/recommendations`를 사용합니다. `lat`, `lng`, `routeId`, `remainingRangeKm`이 필수이고 `direction`, `chargerType`, `limit`은 선택입니다. 응답의 `recommendations` 순위를 기본으로 유지하고, 사용자가 `가까운 순`을 선택하면 반환된 추천 후보를 `distanceKm` 기준으로 재정렬합니다. 같은 `restAreaId`와 방향에 속한 운영기관별 충전소는 한 묶음 안에 표시하되 충전소별 링크와 비교 선택은 유지합니다. `availabilityProbability`, `basis`, `eta`, `distanceKm`, `detourKm`, `busiId`, `orgName`을 검증해 표시하며, 이름이 없으면 운영기관 코드를 표시합니다. 추천·비교 화면의 마지막 상태 수집 시각은 `GET /api/stations?routeId=...&limit=1`의 `statusCollectedAt`으로 별도 확인합니다. 이 조회가 실패해도 추천 결과는 유지하고 수집 시각만 확인 불가로 표시합니다.
+추천·비교 화면은 공개 `GET /api/recommendations`에 현재 위치 `lat`, `lng`, 카카오 장소 검색에서 선택한 목적지 `destLat`, `destLng`, 남은 주행거리 `remainingRangeKm`를 보냅니다. `chargerType`과 `limit`을 선택적으로 보내며, 노선·방향은 응답의 `route`에서 읽습니다. HTTP 200에서 `route: null`이면 자동 선택할 노선이 없는 경우이고, `route`가 있으며 `recommendations`가 비어 있으면 선택한 노선에 추천 후보가 없는 경우입니다.
+
+응답의 `recommendations` 순위를 기본으로 유지하고, 사용자가 `가까운 순`을 선택하면 반환된 추천 후보를 `distanceKm` 기준으로 재정렬합니다. 같은 `restAreaId`와 방향에 속한 운영기관별 충전소는 한 묶음 안에 표시하되 충전소별 링크와 비교 선택은 유지합니다. `availabilityProbability`, `basis`, `eta`, `distanceKm`, `detourKm`, `busiId`, `orgName`을 검증해 표시하며, 이름이 없으면 운영기관 코드를 표시합니다. 마지막 상태 수집 시각은 응답 `route`의 노선 ID와 방향으로 `GET /api/stations?routeId=...&direction=...&limit=1`을 호출해 `statusCollectedAt`을 읽습니다. 이 조회가 실패해도 추천 결과는 유지하고 수집 시각만 확인 불가로 표시합니다.
 
 현재 추천 API에는 **도착 시점 예상 빈 충전기 수**, 도착시각 입력, 예상 대기시간, 충전소별 고장·상태 신뢰도 필드가 없습니다. `availableCount`는 현재 이용 가능 대수이므로 도착 시점 예측 대수로 표시하지 않습니다. 백엔드는 정상 급속충전기가 최소 1대 있는 충전소만 추천 후보에 넣습니다. 일부 충전기만 고장난 충전소는 추천될 수 있으며, 추천 항목에서 충전기별 신뢰도를 확인할 수는 없습니다. M05 선택값도 현재 추천 결과에는 반영하지 않습니다.
 
