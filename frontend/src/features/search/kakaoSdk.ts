@@ -14,7 +14,7 @@ export function loadKakaoMaps(): Promise<typeof kakao.maps> {
       script.remove();
       reject(new Error('카카오맵을 불러오지 못했습니다.'));
     }
-    script.src = `https://dapi.kakao.com/v2/maps/sdk.js?${new URLSearchParams({ appkey: config.kakaoMapAppKey, autoload: 'false' })}`;
+    script.src = `https://dapi.kakao.com/v2/maps/sdk.js?${new URLSearchParams({ appkey: config.kakaoMapAppKey, autoload: 'false', libraries: 'services' })}`;
     script.async = true;
     script.onerror = fail;
     script.onload = () => {

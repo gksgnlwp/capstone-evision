@@ -10,8 +10,8 @@ export function createRecommendationService(client: ApiClient) {
       validateRecommendationQuery(query);
       const response = await client.request('recommendations', {
         signal, credentials: 'omit',
-        query: { lat: query.position.lat, lng: query.position.lng, routeId: query.routeId,
-          direction: query.direction, remainingRangeKm: query.remainingRangeKm,
+        query: { lat: query.position.lat, lng: query.position.lng,
+          destLat: query.destination.lat, destLng: query.destination.lng, remainingRangeKm: query.remainingRangeKm,
           chargerType: query.chargerType, limit: query.limit ?? 5 },
       });
       const parsed = recommendationSchema.safeParse(response);

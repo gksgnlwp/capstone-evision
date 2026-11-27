@@ -60,11 +60,16 @@ try {
         console.log(`GET /api/chargers/{id}/history: OK (${history.items.length}건)`);
       }
 
-      const recommendation = await get('recommendations', { lat: first.lat, lng: first.lng, routeId: routes.routes[0].routeId, remainingRangeKm: 200, limit: 5 });
+      const destination = stations.stations.at(-1);
+      const recommendation = await get('recommendations', {
+        lat: first.lat, lng: first.lng, destLat: destination.lat, destLng: destination.lng, remainingRangeKm: 200, limit: 5,
+      });
       check(Array.isArray(recommendation.recommendations) && Number.isInteger(recommendation.candidateCount)
+        && (recommendation.route === null ? recommendation.recommendations.length === 0
+          : Number.isSafeInteger(recommendation.route?.routeId) && recommendation.route.autoSelected === true)
         && recommendation.recommendations.every(item => typeof item.busiId === 'string'
           && (item.orgName === null || typeof item.orgName === 'string')), 'recommendations: 운영기관 필드를 포함한 추천 응답 형식이 다릅니다.');
-      console.log(`GET /api/recommendations: OK (${recommendation.recommendations.length}곳)`);
+      console.log(`GET /api/recommendations: OK (${recommendation.route?.routeName ?? '자동 선택 노선 없음'}, ${recommendation.recommendations.length}곳)`);
     }
   }
 } catch (error) {

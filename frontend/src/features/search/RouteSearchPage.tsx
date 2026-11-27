@@ -22,6 +22,10 @@ export function RouteSearchPage() {
   const accessType = (['REST_AREA', 'IC'].includes(params.get('accessType') || '') ? params.get('accessType') : '') as AccessFilter;
   const chargerType = params.get('chargerType') || '';
   const destination = params.get('destination')?.slice(0, 100);
+  const recommendParams = new URLSearchParams();
+  if (destination) recommendParams.set('destination', destination);
+  if (chargerType) recommendParams.set('chargerType', chargerType);
+  const recommendLink = `/recommendations?${recommendParams}`;
 
   function change(values: Record<string, string>) {
     setParams(previous => { const next = new URLSearchParams(previous); for (const [key, value] of Object.entries(values)) { if (value) next.set(key, value); else next.delete(key); } return next; });
@@ -47,9 +51,9 @@ export function RouteSearchPage() {
     {route ? <>
       <SearchFilters accessType={accessType} chargerType={chargerType} onAccessChange={value => change({ accessType: value, limit: '' })} onChargerChange={value => change({ chargerType: value, limit: '' })} />
       <RouteResults query={{ routeId: route.routeId, direction: direction || undefined, accessType: accessType || undefined, chargerType: chargerType || undefined, limit: Math.min(500, Math.max(100, Number(params.get('limit')) || 100)) }} onMore={limit => change({ limit: String(limit) })} />
-      <Link to={`/recommendations?${params}`} className="button button--primary button--full">도착 시점 기준으로 추천 받기</Link>
+      <Link to={recommendLink} className="button button--primary button--full">도착 시점 기준으로 추천 받기</Link>
       <p className="search-footnote">방향은 휴게소에 적용하며, 같은 노선의 IC는 함께 표시합니다. 이용 가능 대수는 정상으로 확인된 급속충전기 기준입니다. IC 우회거리는 매핑된 값으로, 실제 도로 주행거리와 다를 수 있습니다.{position && ' 신뢰도가 같은 충전소 안에서는 현재 위치와의 직선거리순입니다.'}</p>
-    </> : routes.status === 'success' && <div className="route-onboarding"><RouteIcon size={32} aria-hidden="true" /><h2>어느 고속도로를 이용하시나요?</h2><p>노선과 방향을 선택하면 휴게소와 IC 인근 충전소를 함께 볼 수 있어요.</p><p className="small muted">목적지 기반 자동 경로 선택은 준비 중입니다.</p></div>}
+    </> : routes.status === 'success' && <div className="route-onboarding"><RouteIcon size={32} aria-hidden="true" /><h2>어느 고속도로를 이용하시나요?</h2><p>노선과 방향을 선택하면 휴게소와 IC 인근 충전소를 함께 볼 수 있어요.</p><Link to={recommendLink} className="text-link">목적지로 추천 받기</Link></div>}
   </div>;
 }
 

@@ -4,7 +4,10 @@
 .recommend-location p { flex-basis: calc(100% - 28px); }
 .recommend-summary { display: flex; flex-direction: column; gap: 3px; padding: 12px 0; border-block: 1px solid var(--color-border); color: var(--color-text-muted); font-size: var(--text-xs); }
 .recommend-summary strong { font-size: var(--text-sm); color: var(--color-text); }
-.recommend-collected { padding-left: 2px; margin-top: -8px; }
+.recommend-destination-input { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+.recommend-place-results { list-style: none; margin: 0; padding: 0; }
+.recommend-place-results button { display: grid; gap: 3px; width: 100%; padding: 10px 4px; text-align: left; border: 0; border-bottom: 1px solid var(--color-border); background: transparent; color: var(--color-text); }
+.recommend-route { display: grid; gap: 4px; }
 .recommend-arrival { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--color-border); font-size: var(--text-sm); }
 .recommend-arrival strong { color: var(--color-primary); font-size: var(--text-xs); text-align: right; }
 .recommend-sort { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-bottom: 1px solid var(--color-border); }
@@ -19,7 +22,6 @@
 .recommend-card h3 { font-size: 16px; line-height: 1.4; }
 .recommend-card__context { font-size: 13px; color: var(--color-text-muted); }
 .recommend-rank { color: var(--color-success); font-size: 13px; font-weight: 700; }
-.compare-rank { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 4px; background: var(--color-primary); color: white; font-size: 12px; font-weight: 700; }
 .recommend-compare { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; font-size: var(--text-sm); }
 .recommend-compare input { width: 17px; height: 17px; accent-color: var(--color-primary); }
 .recommend-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px; padding: 12px 0; }
@@ -39,6 +41,7 @@
 .compare-table thead th:first-child, .compare-table tbody th { width: 78px; }
 .compare-table thead th:not(:first-child) { width: calc((100% - 78px) / 2); }
 .compare-table thead th span { display: block; margin-bottom: 6px; }
+.compare-rank { color: var(--color-success); }
 .compare-table tbody th { color: var(--color-text-muted); font-weight: 500; }
 .compare-table tbody tr:nth-child(6) { background: var(--color-primary-soft); font-weight: 700; }
 .compare-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
