@@ -11,7 +11,7 @@ class RecommendConditionTest {
 
     @Test
     void 기본값과_공백_정리() {
-        RecommendCondition c = RecommendCondition.of(36.5, 127.3, 1, "  ", 120, null, null, " 04 ", null);
+        RecommendCondition c = RecommendCondition.of(36.5, 127.3, 1L, "  ", 120, null, null, " 04 ", null);
 
         assertThat(c.limit()).isEqualTo(RecommendCondition.DEFAULT_LIMIT);
         assertThat(c.direction()).isNull();
@@ -21,25 +21,34 @@ class RecommendConditionTest {
 
     @Test
     void 목적지는_두_값이_모두_있어야_한다() {
-        assertThatThrownBy(() -> RecommendCondition.of(36.5, 127.3, 1, null, 120, 37.5, null, null, null))
+        assertThatThrownBy(() -> RecommendCondition.of(36.5, 127.3, 1L, null, 120, 37.5, null, null, null))
                 .isInstanceOf(ApiException.class).hasMessageContaining("destLat, destLng");
     }
 
     @Test
     void 남은_주행거리와_limit_범위를_검사한다() {
-        assertThatThrownBy(() -> RecommendCondition.of(36.5, 127.3, 1, null, 0, null, null, null, null))
+        assertThatThrownBy(() -> RecommendCondition.of(36.5, 127.3, 1L, null, 0, null, null, null, null))
                 .isInstanceOf(ApiException.class);
-        assertThatThrownBy(() -> RecommendCondition.of(36.5, 127.3, 1, null, 1001, null, null, null, null))
+        assertThatThrownBy(() -> RecommendCondition.of(36.5, 127.3, 1L, null, 1001, null, null, null, null))
                 .isInstanceOf(ApiException.class);
-        assertThatThrownBy(() -> RecommendCondition.of(36.5, 127.3, 1, null, 100, null, null, null, 21))
+        assertThatThrownBy(() -> RecommendCondition.of(36.5, 127.3, 1L, null, 100, null, null, null, 21))
                 .isInstanceOf(ApiException.class);
     }
 
     @Test
     void 좌표_범위를_검사한다() {
-        assertThatThrownBy(() -> RecommendCondition.of(91, 127.3, 1, null, 100, null, null, null, null))
+        assertThatThrownBy(() -> RecommendCondition.of(91, 127.3, 1L, null, 100, null, null, null, null))
                 .isInstanceOf(ApiException.class).hasMessageContaining("현재 위치");
-        assertThatThrownBy(() -> RecommendCondition.of(36.5, 127.3, 1, null, 100, 37.5, 181.0, null, null))
+        assertThatThrownBy(() -> RecommendCondition.of(36.5, 127.3, 1L, null, 100, 37.5, 181.0, null, null))
                 .isInstanceOf(ApiException.class).hasMessageContaining("목적지");
+    }
+
+    @Test
+    void 노선이_없으면_목적지가_필요하고_방향은_줄_수_없다() {
+        assertThat(RecommendCondition.of(36.5, 127.3, null, null, 120, 35.1, 129.0, null, null).autoRoute()).isTrue();
+        assertThatThrownBy(() -> RecommendCondition.of(36.5, 127.3, null, null, 120, null, null, null, null))
+                .isInstanceOf(ApiException.class).hasMessageContaining("routeId 또는 목적지");
+        assertThatThrownBy(() -> RecommendCondition.of(36.5, 127.3, null, "하행", 120, 35.1, 129.0, null, null))
+                .isInstanceOf(ApiException.class).hasMessageContaining("direction");
     }
 }

@@ -13,7 +13,7 @@ import java.util.List;
  * 임의 지점의 노선 위 위치는 본선 꺾은선에 수선을 내린 점까지의 꺾은선 길이(km)다.
  *
  * <p>하행이 위치가 커지는 쪽인지는 휴게소 상·하행 쌍으로 정한다. 우측통행이라 하행 휴게소는 하행 진행방향의 오른쪽에 있다.
- * 원천 방향 값이 섞여 있는 노선이 있어 쌍마다 투표하고, 한쪽이 분명할 때만 방향을 정한다.
+ * 원천 방향 값이 섞여 있는 노선이 있어 쌍마다 투표하고, 한쪽이 반대쪽의 3배 이상일 때만 방향을 정한다.
  */
 final class RouteAxis {
 
@@ -71,6 +71,11 @@ final class RouteAxis {
         return position(xy(new Point(lat, lng), cosLat));
     }
 
+    /** 본선까지의 거리 (km) */
+    double offset(double lat, double lng) {
+        return project(xy(new Point(lat, lng), cosLat))[1];
+    }
+
     double length() {
         return cumulative[cumulative.length - 1];
     }
@@ -110,13 +115,18 @@ final class RouteAxis {
         }
         int win = Math.max(plus, minus);
         int lose = Math.min(plus, minus);
-        if (win < 2 || win < 3 * lose) {
+        if (win == 0 || win < 3 * lose) {
             return 0;
         }
         return plus > minus ? 1 : -1;
     }
 
     private double position(double[] q) {
+        return project(q)[0];
+    }
+
+    /** [본선 위 위치, 본선까지 거리] */
+    private double[] project(double[] q) {
         double bestDist = Double.MAX_VALUE;
         double best = 0;
         for (int i = 0; i + 1 < line.length; i++) {
@@ -130,7 +140,7 @@ final class RouteAxis {
                 best = cumulative[i] + t * Math.sqrt(l2);
             }
         }
-        return best;
+        return new double[] {best, bestDist};
     }
 
     /** center 주변 좌표들의 주성분 방향 (단위 벡터). 주변 좌표가 3개 미만이면 null */

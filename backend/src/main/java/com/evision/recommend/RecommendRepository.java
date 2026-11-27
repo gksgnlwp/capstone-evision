@@ -164,19 +164,28 @@ public class RecommendRepository {
     }
 
     /** 노선의 IC(이름·방향 없음)와 휴게소 좌표. 노선 모양·방향 계산용 */
-    public record RoutePointRow(String name, String direction, double latitude, double longitude) {
+    public record RoutePointRow(long routeId, String name, String direction, double latitude, double longitude) {
+    }
+
+    public record RouteRow(long routeId, String routeNo, String routeName) {
     }
 
     static final String ROUTE_POINTS = """
-            SELECT NULL AS name, NULL AS direction, latitude, longitude FROM interchange WHERE route_id = ?
+            SELECT route_id, NULL AS name, NULL AS direction, latitude, longitude FROM interchange
             UNION ALL
-            SELECT name, direction, latitude, longitude FROM rest_area WHERE route_id = ?
-            ORDER BY latitude, longitude
+            SELECT route_id, name, direction, latitude, longitude FROM rest_area
+            ORDER BY route_id, latitude, longitude
             """;
 
-    public List<RoutePointRow> findRoutePoints(long routeId) {
-        return jdbc.query(ROUTE_POINTS, (rs, i) -> new RoutePointRow(rs.getString("name"), rs.getString("direction"),
-                rs.getDouble("latitude"), rs.getDouble("longitude")), routeId, routeId);
+    /** 모든 노선의 IC·휴게소 좌표 (전국 약 900행) */
+    public List<RoutePointRow> findAllRoutePoints() {
+        return jdbc.query(ROUTE_POINTS, (rs, i) -> new RoutePointRow(rs.getLong("route_id"), rs.getString("name"),
+                rs.getString("direction"), rs.getDouble("latitude"), rs.getDouble("longitude")));
+    }
+
+    public List<RouteRow> findRoutes() {
+        return jdbc.query("SELECT route_id, route_no, route_name FROM route ORDER BY route_id",
+                (rs, i) -> new RouteRow(rs.getLong("route_id"), rs.getString("route_no"), rs.getString("route_name")));
     }
 
     /** 방향은 휴게소에만 있다. 지정하면 그 방향·양방향 휴게소와 IC가 남는다. */

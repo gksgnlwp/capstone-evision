@@ -122,7 +122,7 @@ class RecommendServiceTest {
 
     @Test
     void 하행이면_목적지가_없어도_지나온_IC와_휴게소는_뺀다() {
-        when(repository.findRoutePoints(1L)).thenReturn(RouteAxisTest.northSouthRoute());   // 하행 = 남쪽
+        givenNorthSouthRoute();
 
         RecommendResponse down = service.recommend(condition(100, null, "하행"));
         RecommendResponse up = service.recommend(condition(100, null, "상행"));
@@ -134,9 +134,52 @@ class RecommendServiceTest {
 
     @Test
     void 노선_방향을_정할_수_없으면_앞뒤를_거르지_않는다() {
-        when(repository.findRoutePoints(1L)).thenReturn(List.of());
+        when(repository.findAllRoutePoints()).thenReturn(List.of());
 
         assertThat(service.recommend(condition(100, null, "하행")).candidateCount()).isEqualTo(3);
+    }
+
+    @Test
+    void 목적지만_주면_노선과_방향을_자동으로_고른다() {
+        givenNorthSouthRoute();
+
+        RecommendResponse south = service.recommend(auto(35.3));
+        RecommendResponse north = service.recommend(auto(37.3));
+
+        assertThat(south.route()).isEqualTo(new RecommendResponse.RouteSelection(1L, "1", "경부선", "하행", true));
+        assertThat(south.recommendations()).extracting(RecommendResponse.Item::statId).containsExactly("ST000002");
+        assertThat(north.route().direction()).isEqualTo("상행");
+        assertThat(north.recommendations()).extracting(RecommendResponse.Item::statId)
+                .containsExactlyInAnyOrder("ST000001", "ST000003");
+    }
+
+    @Test
+    void 목적지를_지나친_충전소는_뺀다() {
+        givenNorthSouthRoute();
+
+        RecommendResponse r = service.recommend(auto(36.3));   // 북쪽 33km. S3 IC(36.5)는 목적지를 지나친다
+
+        assertThat(r.recommendations()).extracting(RecommendResponse.Item::statId).containsExactly("ST000001");
+    }
+
+    @Test
+    void 자동으로_고를_노선이_없으면_route_없이_빈_목록() {
+        givenNorthSouthRoute();
+
+        RecommendResponse r = service.recommend(RecommendCondition.of(36.0, 127.0, null, null, 100, 36.0, 129.0,
+                null, null));   // 동쪽 180km: 남북 노선 밖
+
+        assertThat(r.route()).isNull();
+        assertThat(r.recommendations()).isEmpty();
+    }
+
+    @Test
+    void 노선을_지정하면_요청한_노선과_방향을_그대로_알려준다() {
+        givenNorthSouthRoute();
+
+        RecommendResponse r = service.recommend(condition(100, null, "하행"));
+
+        assertThat(r.route()).isEqualTo(new RecommendResponse.RouteSelection(1L, "1", "경부선", "하행", false));
     }
 
     @Test
@@ -201,8 +244,17 @@ class RecommendServiceTest {
         return condition(rangeKm, destLat, null);
     }
 
+    private void givenNorthSouthRoute() {
+        when(repository.findAllRoutePoints()).thenReturn(RouteAxisTest.northSouthRoute());   // 하행 = 남쪽
+        when(repository.findRoutes()).thenReturn(List.of(new RecommendRepository.RouteRow(1L, "1", "경부선")));
+    }
+
+    private static RecommendCondition auto(double destLat) {
+        return RecommendCondition.of(36.0, 127.0, null, null, 100, destLat, 127.0, null, null);
+    }
+
     private static RecommendCondition condition(double rangeKm, Double destLat, String direction) {
-        return RecommendCondition.of(36.0, 127.0, 1, direction, rangeKm, destLat, destLat == null ? null : 127.0,
+        return RecommendCondition.of(36.0, 127.0, 1L, direction, rangeKm, destLat, destLat == null ? null : 127.0,
                 null, null);
     }
 

@@ -73,14 +73,31 @@ public class RecommendService {
         this.clock = clock;
     }
 
-    public RecommendResponse recommend(RecommendCondition c) {
+    public RecommendResponse recommend(RecommendCondition request) {
         LocalDateTime now = LocalDateTime.now(clock);
-        double reachableKm = round(c.remainingRangeKm() * scorer.safetyRatio(), 1);
+        double reachableKm = round(request.remainingRangeKm() * scorer.safetyRatio(), 1);
+
+        RecommendCondition c = request;
+        RecommendResponse.RouteSelection route;
+        if (request.autoRoute()) {
+            RouteHeadingResolver.Choice choice = headingResolver.choose(request.latitude(), request.longitude(),
+                    request.destinationLatitude(), request.destinationLongitude());
+            if (choice == null) {
+                return new RecommendResponse(now, null, reachableKm, 0, 0, List.of());
+            }
+            c = request.withRoute(choice.route().routeId(), choice.direction());
+            route = new RecommendResponse.RouteSelection(choice.route().routeId(), choice.route().routeNo(),
+                    choice.route().routeName(), choice.direction(), true);
+        } else {
+            RecommendRepository.RouteRow r = headingResolver.route(c.routeId());
+            route = new RecommendResponse.RouteSelection(c.routeId(), r == null ? null : r.routeNo(),
+                    r == null ? null : r.routeName(), c.direction(), false);
+        }
 
         Map<Long, Located> nearest = nearestAccessPerStation(c,
                 repository.findCandidateAccesses(c.routeId(), c.direction(), c.chargerType(), now));
         if (nearest.isEmpty()) {
-            return new RecommendResponse(now, reachableKm, 0, 0, List.of());
+            return new RecommendResponse(now, route, reachableKm, 0, 0, List.of());
         }
 
         List<Long> ids = List.copyOf(nearest.keySet());
@@ -122,7 +139,7 @@ public class RecommendService {
             long id = s.candidate().stationId();
             items.add(toItem(items.size() + 1, nearest.get(id), s, predictions.get(id), statuses.get(id), now));
         }
-        return new RecommendResponse(now, reachableKm, candidates.size(), result.unreachable().size(), items);
+        return new RecommendResponse(now, route, reachableKm, candidates.size(), result.unreachable().size(), items);
     }
 
     /** 충전소별 도착 구간의 신선한 AI 예측. 키는 forecastKey(충전소, 구간) */
@@ -155,11 +172,14 @@ public class RecommendService {
      * 진행방향 앞쪽 접근지점만 남기고, 충전소별로 가장 가까운 하나를 고른다.
      * 상행/하행을 지정하면 노선 위 위치로 현재 위치보다 뒤(BEHIND_TOLERANCE_KM 초과)인 곳을 뺀다.
      * IC 근처 충전소는 방향 구분이 없어 이 규칙이 없으면 지나온 IC도 후보가 된다.
-     * 목적지가 있으면 목적지에 더 가까워지는 접근지점만 남긴다.
+     * 목적지가 있으면 목적지에 더 가까워지는 접근지점만 남기고, 노선 위에서 목적지를 지나친 곳도 뺀다.
      */
     Map<Long, Located> nearestAccessPerStation(RecommendCondition c, List<StationAccess> accesses) {
         Map<Long, Located> nearest = new LinkedHashMap<>();
         RouteHeadingResolver.Heading heading = headingResolver.heading(c.routeId(), c.direction());
+        Double destinationAhead = heading != null && c.hasDestination()
+                ? heading.aheadKm(c.latitude(), c.longitude(), c.destinationLatitude(), c.destinationLongitude())
+                : null;
         Double currentToDestination = c.hasDestination()
                 ? GeoDistance.km(c.latitude(), c.longitude(), c.destinationLatitude(), c.destinationLongitude())
                 : null;
@@ -168,9 +188,12 @@ public class RecommendService {
             if (point == null) {
                 continue;
             }
-            if (heading != null
-                    && heading.aheadKm(c.latitude(), c.longitude(), point[0], point[1]) < -BEHIND_TOLERANCE_KM) {
-                continue;
+            if (heading != null) {
+                double ahead = heading.aheadKm(c.latitude(), c.longitude(), point[0], point[1]);
+                if (ahead < -BEHIND_TOLERANCE_KM
+                        || (destinationAhead != null && ahead > destinationAhead + BEHIND_TOLERANCE_KM)) {
+                    continue;
+                }
             }
             if (currentToDestination != null && GeoDistance.km(point[0], point[1], c.destinationLatitude(),
                     c.destinationLongitude()) >= currentToDestination) {
