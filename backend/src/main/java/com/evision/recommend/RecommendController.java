@@ -27,12 +27,14 @@ public class RecommendController {
     @Operation(summary = "충전소 추천",
             description = "노선 위 접근지점(휴게소·IC)에 매핑된 급속 충전소 중 남은 주행거리 × 안전비율 안에 있는 곳을 "
                     + "도착 시 쾌적 이용 확률·우회 거리·출력·대수로 점수 매겨 높은 순으로 준다. "
-                    + "후보가 없으면 빈 목록으로 200을 준다.")
+                    + "routeId 없이 목적지만 주면 출발지·목적지를 둘 다 지나는 노선과 진행방향을 자동으로 골라 응답 route에 준다. "
+                    + "후보가 없거나 자동 선택할 노선이 없으면(route = null) 빈 목록으로 200을 준다.")
     public RecommendResponse recommend(
             @Parameter(description = "현재 위도") @RequestParam double lat,
             @Parameter(description = "현재 경도") @RequestParam double lng,
-            @RequestParam long routeId,
-            @Parameter(description = "휴게소 방향 (원천 값 그대로, 예: 상행). 지정하면 그 방향·양방향 휴게소와 IC만 본다.")
+            @Parameter(description = "노선 ID. 생략하면 목적지(destLat, destLng)가 필수이고 노선·방향을 자동으로 고른다.")
+            @RequestParam(required = false) Long routeId,
+            @Parameter(description = "진행 방향 (상행/하행). routeId와 함께만 지정한다. 그 방향·양방향 휴게소와 IC만 보고 지나온 곳은 뺀다.")
             @RequestParam(required = false) String direction,
             @Parameter(description = "남은 주행 가능 거리 (km)")
             @RequestParam double remainingRangeKm,

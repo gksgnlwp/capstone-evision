@@ -13,9 +13,11 @@ import com.evision.station.domain.AccessType;
  * @param reachableKm      남은 주행거리 × 안전비율 (이 거리 안의 후보만 추천)
  * @param candidateCount   진행 방향·노선 조건을 통과한 충전소 수
  * @param unreachableCount 그중 도달 가능 거리를 넘어 제외된 수
+ * @param route            추천에 쓴 노선·방향. 목적지로 자동 선택할 노선을 찾지 못하면 null (추천도 빈 목록)
  */
 public record RecommendResponse(
         LocalDateTime requestedAt,
+        RouteSelection route,
         double reachableKm,
         int candidateCount,
         int unreachableCount,
@@ -72,6 +74,14 @@ public record RecommendResponse(
             Long routeId,
             String routeName,
             BigDecimal detourKm) {
+    }
+
+    /**
+     * @param direction    상행/하행 (노선 지정 시 요청 값 그대로, 없으면 null)
+     * @param autoSelected 출발지·목적지로 자동 선택했으면 true
+     */
+    public record RouteSelection(long routeId, String routeNo, String routeName, String direction,
+            boolean autoSelected) {
     }
 
     public record Score(double availability, double detour, double power, double capacity, double progress) {

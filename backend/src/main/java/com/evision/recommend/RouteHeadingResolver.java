@@ -1,21 +1,28 @@
 package com.evision.recommend;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Component;
 
 import com.evision.recommend.RecommendRepository.RoutePointRow;
+import com.evision.recommend.RecommendRepository.RouteRow;
 import com.evision.recommend.RouteAxis.DirectionPair;
 import com.evision.recommend.RouteAxis.Point;
 
 /**
- * 노선·진행방향(상행/하행)으로 "앞쪽"이 어느 쪽인지 알려 준다. 노선 모양과 하행 방향은 기준 데이터(IC·휴게소)로
- * 계산하고 노선별로 캐시한다 (기준 데이터는 앱 시작 때만 적재된다).
+ * 노선 모양·방향 정보. 노선 모양과 하행 방향은 기준 데이터(IC·휴게소)로 계산하고 한 번만 만든다
+ * (기준 데이터는 앱 시작 때만 적재된다).
+ *
+ * <ul>
+ * <li>{@link #heading}: 노선·진행방향(상행/하행)으로 "앞쪽"이 어느 쪽인지</li>
+ * <li>{@link #choose}: 출발지·목적지로 이용할 노선과 진행방향 자동 선택</li>
+ * </ul>
  */
 @Component
 public class RouteHeadingResolver {
@@ -23,8 +30,13 @@ public class RouteHeadingResolver {
     static final String UP = "상행";
     static final String DOWN = "하행";
 
+    /** 출발지·목적지가 노선에서 이 거리 안이어야 그 노선을 탈 수 있다고 본다 */
+    static final double MAX_ACCESS_KM = 30;
+    /** 노선 위로 이 거리 이상 움직여야 그 노선을 이용하는 경로로 본다 */
+    static final double MIN_TRIP_KM = 5;
+
     private final RecommendRepository repository;
-    private final Map<Long, Optional<Oriented>> cache = new ConcurrentHashMap<>();
+    private volatile Map<Long, RouteInfo> routes;
 
     public RouteHeadingResolver(RecommendRepository repository) {
         this.repository = repository;
@@ -35,17 +47,74 @@ public class RouteHeadingResolver {
         if (!UP.equals(direction) && !DOWN.equals(direction)) {
             return null;
         }
-        Optional<Oriented> oriented = cache.get(routeId);
-        if (oriented == null) {
-            List<RoutePointRow> rows = repository.findRoutePoints(routeId);
-            if (rows.isEmpty()) {
-                return null;                                   // 기준 데이터 적재 전: 캐시하지 않는다
-            }
-            oriented = Optional.ofNullable(orient(rows));
-            cache.put(routeId, oriented);
+        RouteInfo info = routes().get(routeId);
+        if (info == null || info.oriented() == null) {
+            return null;
         }
-        return oriented.map(o -> new Heading(o.axis(), DOWN.equals(direction) ? o.downSign() : -o.downSign()))
-                .orElse(null);
+        Oriented o = info.oriented();
+        return new Heading(o.axis(), DOWN.equals(direction) ? o.downSign() : -o.downSign());
+    }
+
+    /** 노선 이름 (없으면 null) */
+    public RouteRow route(long routeId) {
+        RouteInfo info = routes().get(routeId);
+        return info == null ? null : info.route();
+    }
+
+    /**
+     * 출발지·목적지를 둘 다 지나는 노선 중 두 지점이 노선에 가장 가까운 것을 고르고,
+     * 목적지가 앞쪽이 되는 방향을 정한다. 마땅한 노선이 없으면 null.
+     * 노선을 갈아타는 경로는 다루지 않는다.
+     */
+    public Choice choose(double fromLat, double fromLng, double toLat, double toLng) {
+        Choice best = null;
+        for (RouteInfo info : routes().values()) {
+            Oriented o = info.oriented();
+            if (o == null) {
+                continue;
+            }
+            double fromOffset = o.axis().offset(fromLat, fromLng);
+            double toOffset = o.axis().offset(toLat, toLng);
+            double move = o.axis().position(toLat, toLng) - o.axis().position(fromLat, fromLng);
+            if (fromOffset > MAX_ACCESS_KM || toOffset > MAX_ACCESS_KM || Math.abs(move) < MIN_TRIP_KM) {
+                continue;
+            }
+            Choice c = new Choice(info.route(), move * o.downSign() > 0 ? DOWN : UP, fromOffset + toOffset,
+                    Math.abs(move));
+            if (best == null || c.accessKm() < best.accessKm()) {
+                best = c;
+            }
+        }
+        return best;
+    }
+
+    /** 출발지·목적지로 고른 노선. accessKm = 두 지점에서 노선까지 거리의 합, tripKm = 노선 위 이동 거리 */
+    public record Choice(RouteRow route, String direction, double accessKm, double tripKm) {
+    }
+
+    private Map<Long, RouteInfo> routes() {
+        Map<Long, RouteInfo> loaded = routes;
+        if (loaded == null) {
+            synchronized (this) {
+                loaded = routes;
+                if (loaded == null) {
+                    loaded = load();
+                    if (!loaded.isEmpty()) {
+                        routes = loaded;               // 기준 데이터 적재 전이면 캐시하지 않는다
+                    }
+                }
+            }
+        }
+        return loaded;
+    }
+
+    private Map<Long, RouteInfo> load() {
+        Map<Long, List<RoutePointRow>> points = repository.findAllRoutePoints().stream()
+                .collect(Collectors.groupingBy(RoutePointRow::routeId));
+        Map<Long, RouteInfo> result = new LinkedHashMap<>();
+        repository.findRoutes().stream().sorted(Comparator.comparingLong(RouteRow::routeId)).forEach(r ->
+                result.put(r.routeId(), new RouteInfo(r, orient(points.getOrDefault(r.routeId(), List.of())))));
+        return result;
     }
 
     /** 하행 방향을 정할 수 없으면 null */
@@ -79,6 +148,9 @@ public class RouteHeadingResolver {
             }
         });
         return result;
+    }
+
+    record RouteInfo(RouteRow route, Oriented oriented) {
     }
 
     record Oriented(RouteAxis axis, int downSign) {
