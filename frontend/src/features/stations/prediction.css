@@ -9,10 +9,13 @@
 .prediction-basis { display: grid; gap: 4px; border-left: 3px solid var(--color-primary); padding-left: 12px; font-size: var(--text-sm); }
 .prediction-basis span { color: var(--color-text-muted); font-size: var(--text-xs); }
 .pattern-scroll { overflow-x: auto; }
-.pattern-table { border-collapse: separate; border-spacing: 3px; width: 100%; min-width: 450px; text-align: center; font-size: var(--text-xs); }
+.pattern-table { border-collapse: separate; border-spacing: 3px; width: 100%; min-width: 650px; text-align: center; font-size: var(--text-xs); }
 .pattern-table th { padding: 7px 2px; color: var(--color-text-muted); }
+.pattern-table tr > th:first-child { position: sticky; left: 0; background: white; }
 .pattern-table td { padding: 0; }
 .pattern-cell { display: block; padding: 9px 2px; border-radius: 5px; color: #102b28; font-weight: 700; }
+.pattern-cell small { display: block; font-size: 11px; font-weight: 500; }
+.pattern-cell--missing { background: var(--color-neutral-soft); color: var(--color-text-muted); font-weight: 500; }
 .pattern-legend { display: flex; align-items: center; gap: 7px; color: var(--color-text-muted); font-size: var(--text-xs); }
-.pattern-gradient { width: 90px; height: 8px; border-radius: var(--radius-pill); background: linear-gradient(90deg, var(--color-primary-soft), var(--color-primary)); }
+.pattern-gradient { width: 90px; height: 8px; border-radius: var(--radius-pill); background: linear-gradient(90deg, rgb(23 75 99 / 10%), rgb(23 75 99 / 53%)); }
 @media (max-width: 390px) { .prediction-facts { grid-template-columns: 1fr; } }

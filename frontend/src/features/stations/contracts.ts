@@ -33,8 +33,31 @@ export const chargerHistorySchema = z.object({
   })),
 });
 
+const patternCount = z.number().int().nonnegative();
+const patternRate = z.number().min(0).max(1);
+const patternWeeks = z.number().int().min(1).max(8);
+const patternSlot = z.object({
+  dayOfWeek: z.number().int().min(1).max(7),
+  time: z.string().regex(/^(?:[01]\d|2[0-3]):(?:00|30)$/),
+  averageOccupancyRate: patternRate.nullable(),
+  comfortRate: patternRate.nullable(),
+  samples: patternCount,
+}).refine(slot => slot.samples === 0
+  ? slot.averageOccupancyRate === null && slot.comfortRate === null
+  : slot.averageOccupancyRate !== null && slot.comfortRate !== null);
+
+export const stationPatternSchema = z.object({
+  stationId: z.number().int().positive(), stationName: z.string().min(1), weeks: patternWeeks,
+  from: z.iso.datetime({ local: true }), to: z.iso.datetime({ local: true }), comfortThreshold: patternRate,
+  totalWindows: patternCount, validWindows: patternCount, excludedWindows: patternCount,
+  slots: z.array(patternSlot).length(336),
+}).refine(pattern => pattern.validWindows + pattern.excludedWindows === pattern.totalWindows
+  && pattern.slots.reduce((sum, slot) => sum + slot.samples, 0) === pattern.validWindows
+  && new Set(pattern.slots.map(slot => `${slot.dayOfWeek}:${slot.time}`)).size === 336);
+
 export type StationDetail = z.infer<typeof stationDetailSchema>;
 export type ChargerHistory = z.infer<typeof chargerHistorySchema>;
+export type StationPattern = z.infer<typeof stationPatternSchema>;
 export interface HistoryQuery { chargerId: number; from: string; to: string; size?: number; cursor?: string }
 
 export function validateId(id: number, label: string) {
