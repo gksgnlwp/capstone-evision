@@ -4,14 +4,14 @@ import { expect, test } from '@playwright/test';
 test.beforeEach(async ({ page }) => { await page.route('https://dapi.kakao.com/**', route => route.abort()); });
 
 const screenPaths = [
-  '/', '/route', '/map', '/settings/operators', '/recommendations/arrival', '/recommendations', '/compare',
+  '/', '/map', '/settings/operators', '/recommendations/arrival', '/recommendations', '/compare',
   '/stations/preview-station', '/stations/preview-station/prediction', '/stations/preview-station/patterns',
   '/stations/preview-station/chargers/preview-charger/history', '/favorites', '/location',
   '/stations/preview-station/prediction-unavailable', '/admin/login', '/admin/collection',
   '/admin/statistics', '/admin/accuracy', '/admin/mappings', '/admin/models', '/settings',
 ];
 
-test('20개 화면과 설정 경로가 직접 접근되며 모바일 폭을 넘지 않는다', async ({ page }) => {
+test('19개 화면과 설정 경로가 직접 접근되며 모바일 폭을 넘지 않는다', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   for (const path of screenPaths) {

@@ -8,7 +8,6 @@ import { ComponentGallery } from '../pages/ComponentGallery';
 import { EmptyState, LoadingState } from '../components/ui';
 import { screens, settingsScreen } from './screens';
 import { LocationProvider } from '../features/search/LocationContext';
-import { RouteSearchPage } from '../features/search/RouteSearchPage';
 import { LocationPage } from '../features/search/LocationPage';
 import { RecommendationPage } from '../features/recommendations/RecommendationPage';
 import { ComparePage } from '../features/recommendations/ComparePage';
@@ -36,6 +35,13 @@ function RouteEffects() {
   return null;
 }
 
+/** 예전 노선 선택 화면 주소는 목적지 기반 추천으로 보냅니다 (목적지 입력값은 유지). */
+function RouteRedirect() {
+  const { search } = useLocation();
+  const destination = new URLSearchParams(search).get('destination')?.trim();
+  return <Navigate replace to={destination ? `/recommendations?${new URLSearchParams({ destination })}` : '/recommendations'} />;
+}
+
 export function App() {
   return <LocationProvider>
     <RouteEffects />
@@ -43,7 +49,7 @@ export function App() {
     <Routes>
       <Route element={<MobileLayout />}>
         <Route index element={<HomePage />} />
-        <Route path="/route" element={<RouteSearchPage />} />
+        <Route path="/route" element={<RouteRedirect />} />
         <Route path="/map" element={<Suspense fallback={<LoadingState label="지도를 준비하고 있습니다." />}><MapSearchPage /></Suspense>} />
         <Route path="/location" element={<LocationPage />} />
         <Route path="/recommendations" element={<RecommendationPage />} />
@@ -56,7 +62,7 @@ export function App() {
         <Route path="/stations/:stationId/prediction-unavailable" element={<PredictionUnavailablePage />} />
         <Route path="/favorites" element={<FavoritesPage />} />
         <Route path="/settings/operators" element={<OperatorPage />} />
-        {screens.filter(s => s.audience === 'mobile' && !['/', '/route', '/map', '/location', '/recommendations', '/recommendations/arrival', '/compare', '/stations/:stationId', '/stations/:stationId/prediction', '/stations/:stationId/patterns', '/stations/:stationId/chargers/:chargerId/history', '/stations/:stationId/prediction-unavailable', '/favorites', '/settings/operators'].includes(s.path)).map(screen =>
+        {screens.filter(s => s.audience === 'mobile' && !['/', '/map', '/location', '/recommendations', '/recommendations/arrival', '/compare', '/stations/:stationId', '/stations/:stationId/prediction', '/stations/:stationId/patterns', '/stations/:stationId/chargers/:chargerId/history', '/stations/:stationId/prediction-unavailable', '/favorites', '/settings/operators'].includes(s.path)).map(screen =>
           <Route key={screen.id} path={screen.path} element={<PlaceholderPage screen={screen} />} />)}
         <Route path="/settings" element={<OperatorPage />} />
         {import.meta.env.DEV && <Route path="/dev/ui" element={<ComponentGallery />} />}
