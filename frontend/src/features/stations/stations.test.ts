@@ -3,6 +3,7 @@ import type { ApiClient } from '../../services/api';
 import { createMockClient } from '../../services/api/mockClient';
 import { stationHandlers } from './stationFixtures';
 import { createStationService } from './stationService';
+import { groupPatternSlots } from './stationUtils';
 
 const service = createStationService(createMockClient(stationHandlers, 0));
 const period = { chargerId: 10401, from: '2026-01-01T00:00:00', to: '2026-01-02T00:00:00' };
@@ -49,5 +50,24 @@ describe('충전소 상세·충전기 이력 계약', () => {
   it('필수 상세 필드가 없으면 성공 결과로 취급하지 않는다', async () => {
     const invalid = createStationService({ request: vi.fn().mockResolvedValue({ stationId: 104 }) } as ApiClient);
     await expect(invalid.detail(104)).rejects.toMatchObject({ kind: 'invalid-response' });
+  });
+  it('혼잡 패턴 336칸을 검증하고 3시간 단위로 표본 수를 가중한다', async () => {
+    const example = await service.patterns(104);
+    expect(example.slots).toHaveLength(336);
+    const empty = { averageOccupancyRate: null, comfortRate: null, samples: 0 };
+    const slots = example.slots.map(slot => ({ ...slot, ...empty }));
+    const request = vi.fn().mockResolvedValue({
+      ...example, validWindows: 4, excludedWindows: example.totalWindows - 4,
+      slots: slots.map((slot, index) => index === 0 ? { ...slot, averageOccupancyRate: 0, comfortRate: 1, samples: 1 }
+        : index === 1 ? { ...slot, averageOccupancyRate: 0.8, comfortRate: 0, samples: 3 } : slot),
+    });
+    const result = await createStationService({ request } as ApiClient).patterns(104);
+    expect(request).toHaveBeenCalledWith('stations/104/patterns', { credentials: 'omit', signal: undefined, query: { weeks: 4 } });
+    const grid = groupPatternSlots(result.slots);
+    expect(grid[0][0]).toMatchObject({ samples: 4, comfort: 0.25 });
+    expect(grid[0][0].occupancy).toBeCloseTo(0.6);
+    expect(grid[0][1]).toEqual({ samples: 0, occupancy: null, comfort: null });
+    request.mockResolvedValueOnce({ ...example, slots: example.slots.slice(1) });
+    await expect(createStationService({ request } as ApiClient).patterns(104)).rejects.toMatchObject({ kind: 'invalid-response' });
   });
 });

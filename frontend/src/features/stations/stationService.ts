@@ -2,7 +2,7 @@ import { config } from '../../config/env';
 import { apiClient, ApiError, type ApiClient } from '../../services/api';
 import { createMockClient } from '../../services/api/mockClient';
 import { stationHandlers } from './stationFixtures';
-import { chargerHistorySchema, stationDetailSchema, validateHistoryQuery, validateId, type HistoryQuery } from './contracts';
+import { chargerHistorySchema, stationDetailSchema, stationPatternSchema, validateHistoryQuery, validateId, type HistoryQuery } from './contracts';
 
 export function createStationService(client: ApiClient) {
   return {
@@ -19,6 +19,17 @@ export function createStationService(client: ApiClient) {
       const response = await client.request(`chargers/${chargerId}/history`, { signal, credentials: 'omit', query: params });
       const parsed = chargerHistorySchema.safeParse(response);
       if (!parsed.success) throw new ApiError('충전기 이력 응답 형식을 확인할 수 없습니다.', 'invalid-response');
+      return parsed.data;
+    },
+    async patterns(stationId: number, signal?: AbortSignal) {
+      validateId(stationId, '충전소');
+      const response = await client.request(`stations/${stationId}/patterns`, {
+        signal, credentials: 'omit', query: { weeks: 4 },
+      });
+      const parsed = stationPatternSchema.safeParse(response);
+      if (!parsed.success || parsed.data.stationId !== stationId) {
+        throw new ApiError('충전소 혼잡 패턴 응답 형식을 확인할 수 없습니다.', 'invalid-response');
+      }
       return parsed.data;
     },
   };

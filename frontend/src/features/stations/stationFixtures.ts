@@ -1,8 +1,7 @@
 import type { MockHandler } from '../../services/api/mockClient';
 import { sampleStations } from '../search/searchFixtures';
-import type { ChargerHistory, StationDetail } from './contracts';
-
-function localKst(date: Date) { return new Date(date.getTime() + 9 * 3600000).toISOString().slice(0, 19); }
+import type { ChargerHistory, StationDetail, StationPattern } from './contracts';
+import { localKst } from './stationUtils';
 function detail(id: number): StationDetail | null {
   const station = sampleStations.find(item => item.stationId === id);
   if (!station) return null;
@@ -44,9 +43,37 @@ function history(chargerId: number, query: Record<string, unknown>): ChargerHist
   return { chargerId, from, to, size, items, nextCursor: matching.length > size ? items.at(-1)?.statusUpdatedAt ?? null : null };
 }
 
+function patterns(station: typeof sampleStations[number]): StationPattern {
+  const windowMs = 30 * 60_000;
+  const to = Math.floor(Date.now() / windowMs) * windowMs;
+  const weeks = 4;
+  const slots = Array.from({ length: 336 }, (_, index) => {
+    const day = Math.floor(index / 48);
+    const slot = index % 48;
+    const hour = Math.floor(slot / 2);
+    const samples = day === 6 && hour < 3 ? 0 : weeks;
+    const rate = (28 + (day * 11 + Math.floor(hour / 3) * 17) % 62) / 100;
+    return {
+      dayOfWeek: day + 1,
+      time: `${String(hour).padStart(2, '0')}:${slot % 2 ? '30' : '00'}`,
+      averageOccupancyRate: samples ? rate : null,
+      comfortRate: samples ? (rate < 0.5 ? 1 : 0) : null,
+      samples,
+    };
+  });
+  const totalWindows = weeks * 336;
+  const validWindows = slots.reduce((sum, slot) => sum + slot.samples, 0);
+  return {
+    stationId: station.stationId, stationName: station.name, weeks,
+    from: localKst(new Date(to - totalWindows * windowMs)), to: localKst(new Date(to)),
+    comfortThreshold: 0.5, totalWindows, validWindows, excludedWindows: totalWindows - validWindows, slots,
+  };
+}
+
 export const stationHandlers: Record<string, MockHandler> = {};
 for (const station of sampleStations) {
   stationHandlers[`GET stations/${station.stationId}`] = () => detail(station.stationId);
+  stationHandlers[`GET stations/${station.stationId}/patterns`] = () => patterns(station);
   for (let index = 0; index < station.fastChargerCount; index++) {
     const chargerId = station.stationId * 100 + index + 1;
     stationHandlers[`GET chargers/${chargerId}/history`] = ({ query = {} }) => history(chargerId, query);
