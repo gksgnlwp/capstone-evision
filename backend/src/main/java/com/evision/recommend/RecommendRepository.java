@@ -163,6 +163,24 @@ public class RecommendRepository {
                 .fetch();
     }
 
+    public record StationForecastRow(LocalDateTime targetWindowStart, BigDecimal pAvailable,
+            BigDecimal predictedOccupancyRate, String modelVersion, LocalDateTime generatedAt) {
+    }
+
+    /** 한 충전소의 [fromWindow, toWindow] 구간 AI 예측 중 generatedAfter 이후에 만든 것 (도착 시점 예측 화면용) */
+    public List<StationForecastRow> findStationForecasts(long stationId, LocalDateTime fromWindow,
+            LocalDateTime toWindow, LocalDateTime generatedAfter) {
+        return query.select(Projections.constructor(StationForecastRow.class,
+                        occupancyForecast.targetWindowStart, occupancyForecast.pAvailable,
+                        occupancyForecast.predictedOccupancyRate, occupancyForecast.modelVersion,
+                        occupancyForecast.generatedAt))
+                .from(occupancyForecast)
+                .where(occupancyForecast.station.id.eq(stationId),
+                        occupancyForecast.targetWindowStart.between(fromWindow, toWindow),
+                        occupancyForecast.generatedAt.goe(generatedAfter))
+                .fetch();
+    }
+
     /** 노선의 IC(이름·방향 없음)와 휴게소 좌표. 노선 모양·방향 계산용 */
     public record RoutePointRow(long routeId, String name, String direction, double latitude, double longitude) {
     }

@@ -222,7 +222,7 @@ public class RecommendService {
         return Math.round(travelKm / properties.averageSpeedKmh() * 60);
     }
 
-    private static Map<Long, CurrentStatus> currentStatuses(List<StatusCountRow> rows) {
+    static Map<Long, CurrentStatus> currentStatuses(List<StatusCountRow> rows) {
         Map<Long, int[]> counts = new HashMap<>();
         for (StatusCountRow r : rows) {
             int[] c = counts.computeIfAbsent(r.stationId(), k -> new int[4]);
@@ -243,7 +243,7 @@ public class RecommendService {
         return result;
     }
 
-    private static int fastCount(CurrentStatus s) {
+    static int fastCount(CurrentStatus s) {
         return s.available() + s.charging() + s.unavailable() + s.unknown();
     }
 
@@ -274,7 +274,7 @@ public class RecommendService {
                 a.getDetourKm());
     }
 
-    private static double round(double v, int scale) {
+    static double round(double v, int scale) {
         return BigDecimal.valueOf(v).setScale(scale, RoundingMode.HALF_UP).doubleValue();
     }
 }
