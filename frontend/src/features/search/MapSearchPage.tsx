@@ -57,7 +57,7 @@ export function MapSearchPage() {
     <div className="map-frame map-search-canvas" role="region" aria-label="충전소 지도">
       <StationMap stations={stations} center={center} position={location.position} selectedId={selectedId} onSelect={setSelectedId} onBoundsChange={onBoundsChange} onAvailabilityChange={onAvailabilityChange} />
       <div className="map-controls">
-        <Link to="/route" className="map-route-search"><Search size={18} aria-hidden="true" /><span>고속도로·목적지로 찾기</span></Link>
+        <Link to="/recommendations" className="map-route-search"><Search size={18} aria-hidden="true" /><span>목적지로 충전소 추천받기</span></Link>
         <div className="map-filter-bar"><SlidersHorizontal size={17} aria-hidden="true" /><SearchFilters accessType={accessType} chargerType={chargerType} onAccessChange={value => { setAccessType(value); setVisibleCount(10); setSelectedId(null); }} onChargerChange={value => { setChargerType(value); setVisibleCount(10); setSelectedId(null); }} /></div>
       </div>
       {mapAvailable && <Button variant="secondary" className="map-search-button" disabled={!viewport || !changed} onClick={() => { setBounds(viewport); setSelectedId(null); setVisibleCount(10); }}><Search size={16} />이 영역 검색</Button>}

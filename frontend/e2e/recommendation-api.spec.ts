@@ -27,7 +27,7 @@ test('PRD 추천과 비교가 목적지 좌표로 조회하고 서버가 고른 
     await route.fulfill({ json });
   });
   await page.goto(`/recommendations?${query}`);
-  await page.getByRole('button', { name: '현재 위치 확인' }).click();
+  await page.getByRole('button', { name: '현재 위치', exact: true }).click();
   await expect(page.getByRole('heading', { name: '추천 상위 5곳' })).toBeVisible();
   await expect(page.getByText('추천 노선 경부선 · 하행')).toBeVisible();
   await expect(page.getByLabel('DEV 환경')).toHaveCount(0);
@@ -50,7 +50,7 @@ test('PRD는 자동 노선 미선택과 선택된 노선의 추천 0건을 구�
     route: selected ? { routeId: 1, routeNo: '1', routeName: '경부선', direction: '하행', autoSelected: true } : null,
   } }));
   await page.goto(`/recommendations?${query}`);
-  await page.getByRole('button', { name: '현재 위치 확인' }).click();
+  await page.getByRole('button', { name: '현재 위치', exact: true }).click();
   await expect(page.getByRole('heading', { name: '이동 경로의 고속도로를 찾지 못했어요' })).toBeVisible();
   selected = true;
   await page.getByLabel('남은 주행 가능 거리 (km)').fill('151');

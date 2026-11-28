@@ -6,6 +6,7 @@ import { StationDetailPage } from './StationDetailPage';
 import { stationHandlers } from './stationFixtures';
 import { createStationService, stationService } from './stationService';
 import { localKst } from './stationUtils';
+import { LocationProvider } from '../search/LocationContext';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -19,10 +20,10 @@ describe('충전소 상세의 급속충전기 경고', () => {
     const slow = { ...detail.chargers[2], chargerId: 99999, chgerId: '완속', fast: false };
     vi.spyOn(stationService, 'detail').mockResolvedValue({ ...detail, reliability: 'ALL_ERROR', statusCollectedAt: oldStatusTime, chargers: [...chargers, slow] });
 
-    render(<MemoryRouter initialEntries={['/stations/104']}><Routes><Route path="/stations/:stationId" element={<StationDetailPage />} /></Routes></MemoryRouter>);
+    render(<LocationProvider><MemoryRouter initialEntries={['/stations/104']}><Routes><Route path="/stations/:stationId" element={<StationDetailPage />} /></Routes></MemoryRouter></LocationProvider>);
 
     expect(await screen.findByRole('alert')).toHaveTextContent('정상으로 확인된 급속충전기가 없어요');
-    expect(screen.getByRole('link', { name: '다른 충전소 찾기' })).toHaveAttribute('href', '/route');
+    expect(screen.getByRole('link', { name: '다른 충전소 찾기' })).toHaveAttribute('href', '/map');
     expect(screen.getByRole('status')).toHaveTextContent('마지막으로 성공한 상태 수집이 10분 이상 지났습니다');
     expect(screen.getByRole('meter')).toHaveAttribute('aria-valuemax', '2');
     expect(within(screen.getByRole('region', { name: '충전기 상태' })).queryByText('충전기 완속')).not.toBeInTheDocument();
@@ -34,7 +35,7 @@ describe('충전소 상세의 급속충전기 경고', () => {
       : charger);
     vi.spyOn(stationService, 'detail').mockResolvedValue({ ...detail, reliability: 'PARTIAL', chargers });
 
-    render(<MemoryRouter initialEntries={['/stations/104']}><Routes><Route path="/stations/:stationId" element={<StationDetailPage />} /></Routes></MemoryRouter>);
+    render(<LocationProvider><MemoryRouter initialEntries={['/stations/104']}><Routes><Route path="/stations/:stationId" element={<StationDetailPage />} /></Routes></MemoryRouter></LocationProvider>);
 
     expect(await screen.findByRole('meter')).toHaveAttribute('aria-valuenow', '2');
     expect(screen.getByText('상태 의심 1')).toBeInTheDocument();

@@ -27,7 +27,7 @@ export function FavoritesPage() {
 
   return <div className="stack favorites-page">
     <div><h1>즐겨찾기</h1><p className="small muted">{favoriteIds.length} / {favoriteLimit}개 · {favoritePersistent ? '이 브라우저에 저장' : '현재 접속 동안만 유지'}</p></div>
-    {favoriteIds.length === 0 ? <EmptyState title="저장한 충전소가 없어요" description="충전소 상세 화면의 별표로 자주 가는 곳을 저장해 보세요." action={<Link className="button button--secondary" to="/route">충전소 찾기</Link>} /> : <>
+    {favoriteIds.length === 0 ? <EmptyState title="저장한 충전소가 없어요" description="충전소 상세 화면의 별표로 자주 가는 곳을 저장해 보세요." action={<Link className="button button--secondary" to="/map">충전소 찾기</Link>} /> : <>
       {result.status === 'loading' && <LoadingState label="즐겨찾기 상태를 불러오고 있습니다." />}
       {result.status === 'error' && <ErrorState message={result.error.message} onRetry={result.retry} />}
       {result.status === 'success' && <>

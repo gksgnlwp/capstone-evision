@@ -1,7 +1,5 @@
 .recommendation-page .card { min-width: 0; }
 .recommendation-page > .card { background: var(--color-neutral-soft); border: 0; border-radius: 10px; }
-.recommend-location { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px; background: var(--color-primary-soft); border-radius: var(--radius-md); }
-.recommend-location p { flex-basis: calc(100% - 28px); }
 .recommend-summary { display: flex; flex-direction: column; gap: 3px; padding: 12px 0; border-block: 1px solid var(--color-border); color: var(--color-text-muted); font-size: var(--text-xs); }
 .recommend-summary strong { font-size: var(--text-sm); color: var(--color-text); }
 .recommend-destination-input { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
@@ -54,3 +52,9 @@
 .arrival-page .card strong { font-size: var(--text-md); }
 .arrival-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .arrival-selection { padding: 10px 12px; border-radius: var(--radius-sm); background: var(--color-warning-soft); color: var(--color-warning); font-size: var(--text-xs); }
+.recommend-origin { display: flex; align-items: center; gap: 10px; }
+.recommend-origin svg { color: var(--color-text-muted); flex: none; }
+.origin-picker__actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.origin-picker__actions .button { gap: 6px; }
+.recommend-card__actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 4px; }
+.recommend-card__actions .button { gap: 6px; min-height: 40px; padding: 0 16px; }

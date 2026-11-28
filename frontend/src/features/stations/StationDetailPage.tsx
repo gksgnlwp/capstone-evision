@@ -1,23 +1,26 @@
 import { useCallback, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { MapPin, Phone, RefreshCw, Star } from 'lucide-react';
+import { MapPin, Navigation, Phone, RefreshCw, Star } from 'lucide-react';
 import { Badge, Button, EmptyState, ErrorState, LoadingState, StatusBadge } from '../../components/ui';
 import { useAsync } from '../../hooks/useAsync';
 import { stationService } from './stationService';
 import { chargerTypeLabel, detailAccessLabel, detailStatusTime } from './stationUtils';
 import { toggleFavorite, usePreferences } from '../personalization/preferences';
 import { collectionTime, isCollectionDelayed } from '../search/searchUtils';
+import { useLocationAccess } from '../search/LocationContext';
+import { kakaoRouteUrl, originLabel } from '../recommendations/navigation';
 
 export function StationDetailPage() {
   const { stationId: rawId } = useParams();
   const stationId = Number(rawId);
   return <div className="stack station-detail-page"><h1>충전소 상세</h1>
-    {!Number.isSafeInteger(stationId) || stationId < 1 ? <EmptyState title="충전소를 다시 선택해 주세요" action={<Link className="text-link" to="/route">충전소 목록으로</Link>} /> : <DetailContent stationId={stationId} />}
+    {!Number.isSafeInteger(stationId) || stationId < 1 ? <EmptyState title="충전소를 다시 선택해 주세요" action={<Link className="text-link" to="/map">충전소 목록으로</Link>} /> : <DetailContent stationId={stationId} />}
   </div>;
 }
 
 function DetailContent({ stationId }: { stationId: number }) {
   const { favoriteIds, favoritePersistent } = usePreferences();
+  const location = useLocationAccess();
   const [favoriteMessage, setFavoriteMessage] = useState('');
   const [favoriteLimitReached, setFavoriteLimitReached] = useState(false);
   const isFavorite = favoriteIds.includes(stationId);
@@ -51,10 +54,14 @@ function DetailContent({ stationId }: { stationId: number }) {
       {favoriteMessage && <p role="status" className="small muted">{favoriteMessage} {favoriteLimitReached && <Link className="text-link" to="/favorites">즐겨찾기 정리하기</Link>}</p>}
       {!favoritePersistent && <p className="small muted">브라우저 저장소를 사용할 수 없어 즐겨찾기는 현재 접속 동안만 유지됩니다. 새로고침하면 사라질 수 있어요.</p>}
       <p className="small muted"><MapPin size={14} aria-hidden="true" /> {station.address || '주소 정보 없음'} {station.addressDetail || ''}</p>
+      <a className="button button--primary button--full" target="_blank" rel="noopener noreferrer"
+        href={kakaoRouteUrl({ name: station.name, lat: station.lat, lng: station.lng },
+          location.position ? { ...location.position, name: originLabel(location.position, location.label) } : null)}>
+        <Navigation size={16} aria-hidden="true" /> 카카오맵으로 길안내</a>
       <div className="row wrap">{station.accesses.map((access, index) => <Badge key={`${access.accessType}-${access.restAreaId || access.icId}-${index}`} tone={access.accessType === 'REST_AREA' ? 'success' : 'info'}>{detailAccessLabel(access)}</Badge>)}</div>
     </section>
     <section className="card stack" aria-label="충전기 상태"><div className="row between wrap"><h2>급속충전기 상태</h2><strong className="charger-summary-count">이용 가능 {available} / {fast.length}대</strong></div>
-      {station.reliability === 'ALL_ERROR' && <div className="charger-alert charger-alert--warning" role="alert"><strong>정상으로 확인된 급속충전기가 없어요.</strong><span>의심·고장·점검·미확인 충전기는 이용 가능 대수에서 제외했습니다. 다른 충전소도 확인해 주세요.</span><Link className="text-link" to="/route">다른 충전소 찾기</Link></div>}
+      {station.reliability === 'ALL_ERROR' && <div className="charger-alert charger-alert--warning" role="alert"><strong>정상으로 확인된 급속충전기가 없어요.</strong><span>의심·고장·점검·미확인 충전기는 이용 가능 대수에서 제외했습니다. 다른 충전소도 확인해 주세요.</span><Link className="text-link" to="/map">다른 충전소 찾기</Link></div>}
       {delayed && <div className="charger-alert charger-alert--warning" role="status"><strong>상태 수집 지연</strong><span>마지막으로 성공한 상태 수집이 10분 이상 지났습니다. 현장 상태와 다를 수 있어요.</span></div>}
       <p className="small muted">{station.statusCollectedAt ? `${collectionTime(station.statusCollectedAt)} 마지막 수집` : '상태 수집 시각 정보 없음'}</p>
       {fast.length > 0 && <><div className="charger-gauge" role="meter" aria-label="급속충전기 이용 가능 비율" aria-valuemin={0} aria-valuemax={fast.length} aria-valuenow={available} aria-valuetext={`이용 가능 ${available}대, 전체 급속충전기 ${fast.length}대${suspect ? `, 상태 의심 ${suspect}대` : ''}${unknown ? `, 상태 미확인 ${unknown}대` : ''}`}>

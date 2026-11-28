@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { MapPin, RefreshCw } from 'lucide-react';
+import { MapPin, Navigation, RefreshCw } from 'lucide-react';
 import { Badge, Button, EmptyState, ErrorState, LoadingState } from '../../components/ui';
 import { config } from '../../config/env';
 import { useAsync } from '../../hooks/useAsync';
@@ -11,17 +11,23 @@ import { accessLabel, arrivalLabel, basisLabel, groupRecommendations, operatorLa
 import { demoPosition, destinationFromParams, queryFromParams } from './queryState';
 import type { RecommendationItem, RecommendationQuery } from './contracts';
 import { DestinationSearch } from './DestinationSearch';
+import { OriginPicker } from './OriginPicker';
+import { kakaoRouteUrl, originLabel } from './navigation';
+import type { Coordinates } from '../search/contracts';
 import { RecommendationRoute } from './RecommendationRoute';
 
 export function RecommendationPage() {
   const [params, setParams] = useSearchParams();
   const location = useLocationAccess();
   const [selected, setSelected] = useState<number[]>([]);
+  const [originOpen, setOriginOpen] = useState(false);
   const demo = config.environment === 'DEV' && params.get('demo') === '1';
   const position = location.position ?? (demo ? demoPosition : null);
   const destination = destinationFromParams(params);
   const destinationText = params.get('destination')?.slice(0, 100) || '';
   const query = useMemo(() => queryFromParams(params, position), [params, position]);
+  const usingDemo = demo && !location.position;
+  const origin = position ? { ...position, name: usingDemo ? '시연 위치' : originLabel(location.position, location.label) } : null;
 
   function change(values: Record<string, string>) {
     setSelected([]);
@@ -50,16 +56,18 @@ export function RecommendationPage() {
         : <DestinationSearch key={destinationText} initialValue={destinationText}
           onSelect={place => change({ destination: place.name, destLat: String(place.lat), destLng: String(place.lng) })} />}
       <div className="field"><label htmlFor="remaining-range">남은 주행 가능 거리 (km)</label><input id="remaining-range" type="number" min="1" max="1000" step="1" inputMode="decimal" placeholder="예: 150" value={params.get('remainingRangeKm') || ''} onChange={event => change({ remainingRangeKm: event.target.value })} /></div>
-      {!position && <div className="recommend-location"><MapPin size={18} aria-hidden="true" /><p className="small">추천에는 현재 위치가 필요해요. 위치는 브라우저 메모리에만 유지합니다.</p><Button variant="secondary" onClick={() => void location.request()} loading={location.status === 'loading'}>현재 위치 확인</Button>{config.environment === 'DEV' && <Button variant="ghost" onClick={() => change({ demo: '1' })}>시연 위치 사용</Button>}</div>}
-      {position && <p className="small muted">{demo && !location.position ? '시연 위치 적용' : '현재 위치 확인됨'} · 도착 시각은 서버가 거리로 계산합니다.</p>}
-      {location.message && !position && <p role="alert" className="small field__error">{location.message}</p>}
+      <div className="recommend-origin"><MapPin size={18} aria-hidden="true" /><div><p className="small muted">출발</p><strong>{origin ? origin.name : '출발지를 정해 주세요'}</strong></div></div>
+      <OriginPicker open={originOpen} onOpenChange={setOriginOpen} />
+      {!position && config.environment === 'DEV' && <Button variant="ghost" onClick={() => change({ demo: '1' })}>시연 위치 사용</Button>}
+      {position ? <p className="small muted">출발지는 브라우저 메모리에만 유지합니다 · 도착 시각은 서버가 거리로 계산합니다.</p>
+        : <p className="small muted">추천에는 출발지가 필요해요. 현재 위치를 확인하거나 장소를 검색해 주세요.</p>}
     </section>
-    {query ? <RecommendationResults query={query} params={params} selected={selected} onToggle={toggle} />
-      : <EmptyState title="추천 조건을 입력해 주세요" description="목적지를 선택하고 남은 주행 가능 거리와 현재 위치를 확인하면 추천 결과가 표시됩니다." action={<Link className="text-link" to="/route">노선별 충전소 보기</Link>} />}
+    {query ? <RecommendationResults query={query} params={params} selected={selected} onToggle={toggle} origin={origin} />
+      : <EmptyState title="추천 조건을 입력해 주세요" description="목적지를 선택하고 남은 주행 가능 거리와 현재 위치를 확인하면 추천 결과가 표시됩니다." action={<Link className="text-link" to="/map">내 주변 지도로 보기</Link>} />}
   </div>;
 }
 
-function RecommendationResults({ query, params, selected, onToggle }: { query: RecommendationQuery; params: URLSearchParams; selected: number[]; onToggle: (id: number) => void }) {
+function RecommendationResults({ query, params, selected, onToggle, origin }: { query: RecommendationQuery; params: URLSearchParams; selected: number[]; onToggle: (id: number) => void; origin: (Coordinates & { name: string }) | null }) {
   const [sort, setSort] = useState<RecommendationSort>('score');
   const loader = useCallback((signal: AbortSignal) => recommendationService.getRecommendations(query, signal), [query]);
   const result = useAsync(loader);
@@ -77,21 +85,25 @@ function RecommendationResults({ query, params, selected, onToggle }: { query: R
     <Link className="recommend-arrival" to={`/recommendations/arrival?${params}`}><span>도착 예정시각 변경</span><strong>{params.get('arrivalOffsetMin') ? `선택한 ${params.get('arrivalOffsetMin')}분 후 · 추천 미적용` : '서버 추정 시각 기준'}</strong></Link>
     {result.data.recommendations.length > 0 && <div className="recommend-sort" role="group" aria-label="추천 결과 정렬"><button type="button" aria-pressed={sort === 'score'} onClick={() => setSort('score')}>빈자리 우선</button><button type="button" aria-pressed={sort === 'distance'} onClick={() => setSort('distance')}>가까운 순</button></div>}
     {result.data.recommendations.length === 0 ? <EmptyState title="추천 가능한 충전소가 없어요" description="선택된 노선에 현재 조건으로 도달할 수 있는 충전소가 없어요. 남은 주행 가능 거리를 확인해 주세요." />
-      : <div className="station-list">{groups.map(group => group.items.length > 1 ? <section key={group.key} className="recommend-group" aria-label={`${group.label} 충전소 ${group.items.length}곳`}><div className="recommend-group__heading"><h3>{group.label}</h3><span>운영기관별 {group.items.length}곳</span></div>{group.items.map(item => <RecommendationCard key={item.stationId} item={item} selected={selected.includes(item.stationId)} onToggle={() => onToggle(item.stationId)} />)}</section> : <RecommendationCard key={group.key} item={group.items[0]} selected={selected.includes(group.items[0].stationId)} onToggle={() => onToggle(group.items[0].stationId)} />)}</div>}
+      : <div className="station-list">{groups.map(group => group.items.length > 1 ? <section key={group.key} className="recommend-group" aria-label={`${group.label} 충전소 ${group.items.length}곳`}><div className="recommend-group__heading"><h3>{group.label}</h3><span>운영기관별 {group.items.length}곳</span></div>{group.items.map(item => <RecommendationCard key={item.stationId} item={item} origin={origin} selected={selected.includes(item.stationId)} onToggle={() => onToggle(item.stationId)} />)}</section> : <RecommendationCard key={group.key} item={group.items[0]} origin={origin} selected={selected.includes(group.items[0].stationId)} onToggle={() => onToggle(group.items[0].stationId)} />)}</div>}
     {selected.length === 2 && <Link className="button button--primary button--full" to={`/compare?${compareParams}`}>선택한 2곳 비교하기</Link>}
     <p className="search-footnote">빈자리 우선은 서버의 추천 점수 순서로, 이용 가능 확률과 우회거리·출력·충전기 수·주행 가능 범위를 함께 반영합니다. 정상 급속충전기가 없는 충전소는 추천 후보에서 제외됩니다. 가까운 순은 서버가 계산한 추정 도로거리 기준입니다. 대기시간은 현재 API에서 제공하지 않습니다.</p>
   </div>;
 }
 
-function RecommendationCard({ item, selected, onToggle }: { item: RecommendationItem; selected: boolean; onToggle: () => void }) {
+function RecommendationCard({ item, origin, selected, onToggle }: { item: RecommendationItem; origin: (Coordinates & { name: string }) | null; selected: boolean; onToggle: () => void }) {
   const { operatorIds } = usePreferences();
   return <article className={`recommend-card card ${operatorIds.includes(item.busiId) ? 'recommend-card--preferred' : ''}`}>
     <div className="row between"><span className="recommend-rank" aria-label={`추천 ${item.rank}위`}>{item.rank}순위</span><label className="recommend-compare"><input type="checkbox" checked={selected} onChange={onToggle} aria-label={`${item.name} 비교 선택`} /> 비교</label></div>
     <h3>{item.name}</h3>
     <p className="recommend-card__context">{accessLabel(item)} · {operatorLabel(item)}{operatorIds.includes(item.busiId) && ' · 선호 운영기관'}</p>
-    <div className="recommend-metrics"><div><span>도착 시 이용 확률</span><strong>{probabilityLabel(item.availabilityProbability)}</strong></div><div><span>현재 위치에서</span><strong>약 {item.distanceKm.toFixed(1)}km</strong></div><div><span>도착 예상</span><strong>{arrivalLabel(item.eta)}</strong></div><div><span>예상 대기</span><strong>정보 없음</strong></div></div>
+    <div className="recommend-metrics"><div><span>도착 시 이용 확률</span><strong>{probabilityLabel(item.availabilityProbability)}</strong></div><div><span>출발지에서</span><strong>약 {item.distanceKm.toFixed(1)}km</strong></div><div><span>도착 예상</span><strong>{arrivalLabel(item.eta)}</strong></div><div><span>예상 대기</span><strong>정보 없음</strong></div></div>
     <div className="recommend-card__basis"><Badge tone={item.basis === 'AI_FORECAST' ? 'success' : 'neutral'}>{basisLabel(item)}</Badge></div>
     <details className="recommend-reason"><summary>추천 기준 보기</summary><p>{reasonLabel(item)}</p></details>
-    <Link className="text-link" to={`/stations/${item.stationId}`}>충전소 상세 보기</Link>
+    <div className="recommend-card__actions">
+      <a className="button button--primary" href={kakaoRouteUrl({ name: item.name, lat: item.latitude, lng: item.longitude }, origin)}
+        target="_blank" rel="noopener noreferrer" aria-label={`${item.name} 카카오맵 길안내`}><Navigation size={16} aria-hidden="true" /> 길안내</a>
+      <Link className="text-link" to={`/stations/${item.stationId}`}>충전소 상세 보기</Link>
+    </div>
   </article>;
 }

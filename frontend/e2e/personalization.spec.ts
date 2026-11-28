@@ -13,11 +13,11 @@ test('상세에서 즐겨찾기를 저장하고 목록에서 상태 조회·해�
   await expect(page.getByText('저장한 충전소가 없어요')).toBeVisible();
 });
 
-test('선호 운영기관을 저장하면 경로 목록에서 해당 기관만 강조한다', async ({ page }) => {
+test('선호 운영기관을 저장하면 충전소 목록에서 해당 기관만 강조한다', async ({ page }) => {
   await page.goto('/settings');
   await page.getByRole('checkbox', { name: /환경부/ }).check();
   await page.getByRole('button', { name: /저장/ }).click();
-  await page.goto('/route?routeId=1');
+  await page.goto('/map');
   await expect(page.locator('.station-card--preferred')).not.toHaveCount(0);
   await expect(page.getByText('선호 운영기관').first()).toBeVisible();
   await expect(page.locator('.station-card:not(.station-card--preferred)')).not.toHaveCount(0);
@@ -33,9 +33,7 @@ test('브라우저 저장소가 막히면 현재 접속 동안만 적용됨을 �
   await page.getByRole('checkbox', { name: /환경부/ }).check();
   await page.getByRole('button', { name: /저장/ }).click();
   await expect(page.getByText('선호 운영기관을 현재 접속 동안 적용했습니다.')).toBeVisible();
-  await page.getByRole('link', { name: '홈', exact: true }).click();
-  await page.getByRole('link', { name: /노선·방향 직접 선택하기/ }).click();
-  await page.getByLabel('고속도로 노선').selectOption('1');
+  await page.getByRole('link', { name: '지도', exact: true }).click();
   await expect(page.locator('.station-card--preferred')).not.toHaveCount(0);
   await page.getByRole('link', { name: '안성휴게소(부산) 상세 보기' }).click();
   await page.getByRole('button', { name: '즐겨찾기 추가' }).click();

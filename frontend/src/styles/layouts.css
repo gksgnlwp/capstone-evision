@@ -26,8 +26,6 @@
 .journey-field input::placeholder { color: var(--color-text-muted); font-weight: 400; }
 .journey-origin-icon { color: var(--color-text-muted); }
 .journey-destination-icon { color: var(--color-success); }
-.route-shortcut { display: flex; justify-content: space-between; align-items: center; gap: 12px; background: white; color: var(--color-text); padding: 13px 0; border-bottom: 1px solid var(--color-border); }
-.route-shortcut span { display: block; font-size: var(--text-sm); font-weight: 700; margin-top: 4px; }
 .home-map-link { display: flex; align-items: center; justify-content: space-between; min-height: 44px; color: var(--color-text); font-size: var(--text-sm); font-weight: 700; padding: 5px 0; }
 .home-map-link svg { color: var(--color-text-muted); }
 .home-guidance { border-top: 1px solid var(--color-border); color: var(--color-text-muted); padding: 12px 0 0; font-size: var(--text-xs); }

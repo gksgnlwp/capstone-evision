@@ -22,27 +22,37 @@ async function searchPlaces(keyword: string, signal: AbortSignal) {
   });
 }
 
-export function DestinationSearch({ initialValue, onSelect }: {
+/**
+ * 카카오 장소 검색. 목적지와 출발지 입력에 같이 씁니다.
+ * 다른 form 안에서도 쓸 수 있게 form 대신 Enter 키와 버튼으로 검색합니다.
+ */
+export function DestinationSearch({ initialValue, onSelect, label = '목적지', inputId = 'recommend-destination',
+  placeholder = '장소명으로 검색', showDemo = true }: {
   initialValue: string;
   onSelect: (destination: Destination) => void;
+  label?: string;
+  inputId?: string;
+  placeholder?: string;
+  showDemo?: boolean;
 }) {
   const [text, setText] = useState(initialValue);
-  const [search, setSearch] = useState<{ keyword: string } | null>(null);
+  // 홈에서 입력한 목적지로 들어오면 검색 버튼을 다시 누르지 않아도 바로 검색합니다.
+  const [search, setSearch] = useState<{ keyword: string } | null>(() =>
+    initialValue.trim() && config.kakaoMapAppKey ? { keyword: initialValue.trim() } : null);
+  const submit = () => { if (text.trim()) setSearch({ keyword: text.trim() }); };
   return <div className="stack">
-    <form className="field" onSubmit={event => {
-      event.preventDefault();
-      if (text.trim()) setSearch({ keyword: text.trim() });
-    }}>
-      <label htmlFor="recommend-destination">목적지</label>
+    <div className="field">
+      <label htmlFor={inputId}>{label}</label>
       <div className="recommend-destination-input">
-        <input id="recommend-destination" value={text} maxLength={100} placeholder="장소명으로 검색"
-          onChange={event => { setText(event.target.value); setSearch(null); }} />
-        <Button type="submit" variant="secondary" disabled={!text.trim() || !config.kakaoMapAppKey}>검색</Button>
+        <input id={inputId} value={text} maxLength={100} placeholder={placeholder} enterKeyHint="search"
+          onChange={event => { setText(event.target.value); setSearch(null); }}
+          onKeyDown={event => { if (event.key === 'Enter' && !event.nativeEvent.isComposing) { event.preventDefault(); submit(); } }} />
+        <Button type="button" variant="secondary" onClick={submit} disabled={!text.trim() || !config.kakaoMapAppKey}>검색</Button>
       </div>
-    </form>
-    {!config.kakaoMapAppKey && <p className="small muted">카카오맵 키가 설정되면 목적지를 검색할 수 있어요.</p>}
+    </div>
+    {!config.kakaoMapAppKey && <p className="small muted">카카오맵 키가 설정되면 장소를 검색할 수 있어요.</p>}
     {search && <PlaceResults search={search} onSelect={onSelect} />}
-    {config.environment === 'DEV' && <Button type="button" variant="ghost" onClick={() => onSelect(demoDestination)}>시연 목적지 사용</Button>}
+    {showDemo && config.environment === 'DEV' && <Button type="button" variant="ghost" onClick={() => onSelect(demoDestination)}>시연 목적지 사용</Button>}
   </div>;
 }
 
@@ -60,7 +70,7 @@ function PlaceResults({ search, onSelect }: {
     return validCoordinates(destination) ? [{ place, destination }] : [];
   });
   if (!places.length) return <p className="small muted" role="status">검색 결과가 없어요. 다른 장소명으로 검색해 주세요.</p>;
-  return <ul className="recommend-place-results" aria-label="목적지 검색 결과">
+  return <ul className="recommend-place-results" aria-label="장소 검색 결과">
     {places.map(({ place, destination }) => <li key={place.id}>
       <button type="button" onClick={() => onSelect(destination)}>
         <strong>{destination.name}</strong>

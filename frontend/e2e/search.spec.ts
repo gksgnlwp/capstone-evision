@@ -4,30 +4,25 @@ test.beforeEach(async ({ page }) => {
   await page.route('https://dapi.kakao.com/**', route => route.abort());
 });
 
-test('목적지를 입력하고 노선과 방향을 선택해 충전소를 찾는다', async ({ page }) => {
+test('홈에서 목적지를 입력하면 목적지 기반 추천 화면으로 이동한다', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByText('기능별 화면')).toHaveCount(0);
+  await expect(page.getByRole('link', { name: /노선·방향 직접 선택하기/ })).toHaveCount(0);
   await page.getByLabel('목적지', { exact: true }).fill('부산');
-  await page.getByRole('button', { name: '경로 위 충전소 보기' }).click();
-  await expect(page).toHaveURL(/destination=/);
-  await page.getByLabel('고속도로 노선', { exact: true }).selectOption('1');
-  await page.getByLabel('진행 방향', { exact: true }).selectOption('하행');
-  await expect(page.getByRole('link', { name: '안성휴게소(부산) 상세 보기', exact: true })).toBeVisible();
-  await expect(page.getByRole('link', { name: '안성휴게소(서울) 상세 보기', exact: true })).toHaveCount(0);
-  await expect(page.getByRole('link', { name: '오산IC 인근 충전소 상세 보기', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'IC 인근', exact: true }).click();
-  await expect(page.getByRole('link', { name: '안성휴게소(부산) 상세 보기', exact: true })).toHaveCount(0);
-  await expect(page.getByRole('link', { name: '안성IC 인근 충전소 상세 보기', exact: true })).toHaveCount(1);
-  await page.reload();
-  await expect(page.getByLabel('진행 방향', { exact: true })).toHaveValue('하행');
-  await expect(page.getByRole('button', { name: 'IC 인근', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('button', { name: '충전소 추천 받기' }).click();
+  await expect(page).toHaveURL(/\/recommendations\?destination=/);
+  await expect(page.getByRole('heading', { name: '충전소 추천', level: 1 })).toBeVisible();
+  await expect(page.getByLabel('목적지', { exact: true })).toHaveValue('부산');
   await page.goto('/');
   await expect(page.getByRole('button', { name: '부산', exact: true })).toBeVisible();
 });
 
-test('필터 결과가 없으면 빈 상태를 표시한다', async ({ page }) => {
-  await page.goto('/route?routeId=2&direction=하행&accessType=IC');
-  await expect(page.getByRole('heading', { name: '조건에 맞는 충전소가 없어요' })).toBeVisible();
+test('예전 노선 선택 주소는 추천 화면으로 보낸다', async ({ page }) => {
+  await page.goto('/route?routeId=1&destination=부산');
+  await expect(page).toHaveURL(/\/recommendations\?destination=/);
+  await expect(page.getByLabel('목적지', { exact: true })).toHaveValue('부산');
+  await page.goto('/route');
+  await expect(page).toHaveURL(/\/recommendations$/);
 });
 
 test('권한 거부 후 목적지·지도 대안과 재요청을 제공한다', async ({ page }) => {

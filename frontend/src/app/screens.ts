@@ -10,7 +10,6 @@ export interface ScreenDefinition {
 
 export const screens: ScreenDefinition[] = [
   { id: 'M01', path: '/', title: '홈 · 목적지 설정', description: '최근 목적지 선택과 노선·방향 탐색의 시작 화면', phase: 2, audience: 'mobile', useCases: ['U02', 'U13'] },
-  { id: 'M02', path: '/route', title: '경로 위 충전소', description: '노선·방향별 휴게소와 IC 인근 충전소 목록', phase: 2, audience: 'mobile', useCases: ['U02'] },
   { id: 'M03', path: '/map', title: '내 주변 지도', description: '지도 영역 조회, 충전소 필터와 마커 요약', phase: 2, audience: 'mobile', useCases: ['U01', 'U13'] },
   { id: 'M04', path: '/settings/operators', title: '선호 운영기관', description: '선호 기관 선택과 브라우저 저장', phase: 5, audience: 'mobile', useCases: ['U03'] },
   { id: 'M05', path: '/recommendations/arrival', title: '도착 예정시각 변경', description: 'M06 추천 결과에서 선택적으로 여는 시각 설정 화면', phase: 3, audience: 'mobile', useCases: ['U12'] },
