@@ -25,9 +25,11 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 public class StationQueryController {
 
     private final StationQueryService service;
+    private final StationPatternService patternService;
 
-    public StationQueryController(StationQueryService service) {
+    public StationQueryController(StationQueryService service, StationPatternService patternService) {
         this.service = service;
+        this.patternService = patternService;
     }
 
     /** FR-06 노선 목록 */
@@ -86,6 +88,21 @@ public class StationQueryController {
     @Operation(summary = "충전소 상세", description = "없거나 삭제된 충전소면 404 NOT_FOUND")
     public StationDetailResponse detail(@PathVariable long stationId) {
         return service.detail(stationId);
+    }
+
+    /** M10 시간대별 혼잡 패턴 */
+    @GetMapping("/stations/{stationId}/patterns")
+    @Operation(summary = "충전소 혼잡 패턴",
+            description = "최근 weeks주(기본 4, 1~8)의 30분 집계를 요일·30분 칸별로 묶어 평균 사용률(급속 기준)과 "
+                    + "쾌적 비율(사용률이 comfortThreshold 미만이던 구간 비율, 추천·AI 예측과 같은 기준)을 준다. "
+                    + "slots는 월 00:00 ~ 일 23:30 336칸이며 표본이 없는 칸은 samples=0, 값은 null. "
+                    + "사용률을 알 수 없는 구간(수집 누락, 급속 충전기가 모두 고장·점검·미확인)은 평균에서 빼고 excludedWindows로 센다. "
+                    + "없거나 삭제된 충전소면 404 NOT_FOUND, weeks가 범위 밖이면 400 INVALID_QUERY.")
+    public StationPatternResponse patterns(
+            @PathVariable long stationId,
+            @Parameter(description = "최근 몇 주 (기본 4, 1~8)")
+            @RequestParam(required = false) Integer weeks) {
+        return patternService.patterns(stationId, weeks);
     }
 
     /** OP-19 충전기 상태 이력 */
